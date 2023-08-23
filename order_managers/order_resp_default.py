@@ -1,0 +1,15 @@
+order_resp_default = {"order_id":"B1673594282592DTF_Demo",
+                      "cl_order_id": 1673594282592,
+                      "execution_id": 1111111111111111,
+                      "quantity": 10,
+                      "side": 2,
+                      "symbol": "test/test",
+                      "execution_status": "F",
+                      "order_status": 2,
+                      "last_price": 100,
+                      "average_price": 100,
+                      "execution_message": "NULL",
+                      "transaction_time": "",
+                      "created_at": "",
+                      "updated_at": ""
+                       }
