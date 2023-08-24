@@ -154,18 +154,48 @@ def get_signal_default(i,np_closePx, signals_dict, sig_lag=0, position="long",si
     
     # if i < L_q_lookback or i < S_q_lookback:
     #     return False
-    
+    sig_lagged = i -sig_lag
+    if sig_lagged >= i-1:
+        sig_lagged = i
     if position == "long":        
         if side == "buy": 
-            signal = signals_dict["sig"][i] >=1
+            signal = signals_dict["sig"][i] > 0
         elif side == "sell":
-            signal = signals_dict["sig"][i] <1
+            signal = signals_dict["sig"][i] == 0
             
     elif position == "short":
         if side == "buy": 
-            signal = signals_dict["sig"][i] <=-1
+            signal = signals_dict["sig"][i] == 0
         elif side == "sell":
-            signal = signals_dict["sig"][i] > -1
+            signal = signals_dict["sig"][i] > 0 
+
+    return signal
+
+def get_z_sig(i,np_closePx, signals_dict, sig_lag=0, position="long",side="buy",**kwargs)-> bool:
+    
+    # if i < L_q_lookback or i < S_q_lookback:
+    #     return False
+    # print(signals_dict)
+    L_buy=kwargs.get("L_buy",1)
+    L_sell=kwargs.get("L_sell",1)
+    S_buy=kwargs.get("S_buy",-1)
+    S_sell=kwargs.get("S_sell",-1)
+
+    # print(f"S_sell: {kwargs.get('S_sell',-1)}")
+    sig_lagged = i -sig_lag
+    if sig_lagged >= i-1:
+        sig_lagged = i
+    if position == "long":        
+        if side == "buy": 
+            signal = signals_dict["sig"][sig_lagged] >=L_buy
+        elif side == "sell":
+            signal = signals_dict["sig"][sig_lagged] <L_sell
+            
+    elif position == "short":
+        if side == "buy": 
+            signal = signals_dict["sig"][sig_lagged] <= S_buy
+        elif side == "sell":
+            signal = signals_dict["sig"][sig_lagged] > S_sell
 
     return signal
 
@@ -218,6 +248,8 @@ class model:
             _get_signal = get_signal_strengths
         elif signal_function == "strength_w_macros":
             _get_signal = get_signal_strengths_w_macros
+        elif signal_function == "z_sig":
+            _get_signal = model.get_z_sig
         elif signal_function == "default":
             _get_signal = get_signal_default
         else:

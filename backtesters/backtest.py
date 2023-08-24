@@ -141,7 +141,9 @@ def _backtest(model_name,
     signals_dict = {}
 
     for signal in signals:
+        print(signal)
         signals_dict[signal] = df[signal].values
+
         
     # print(f"kwargs from _backtest: {kwargs}")
     # =============================================================================
@@ -159,6 +161,8 @@ def _backtest(model_name,
         _get_signal = model.get_signal_strengths_w_macros
     elif signal_function == "default":
         _get_signal = model.get_signal_default
+    elif signal_function == "z_sig":
+        _get_signal = model.get_z_sig
     elif signal_function == "meta":
         _get_signal = get_signal_meta
     elif signal_function == "Y":
@@ -584,9 +588,15 @@ def backtest(model_name,
     # =============================================================================
     if produce_signal is False:
         t0=time.time()
-        df_backtested, df_trades, df_summary = backtest_summary(df,long_equity,short_equity, fee=fee*10000, N=N, timeframe=timeframe)
+        df_backtested, df_trades, df_summary = backtest_summary(df,
+                                                                long_equity,
+                                                                short_equity, 
+                                                                fee=fee*10000,
+                                                                N=N,
+                                                                timeframe=timeframe,
+                                                                )
         dur_metrics = np.round(time.time()-t0,3)
-        
+        # print(df_backtested.columns)
         t0=time.time()
         if plots == "simple":
             backtest_plots_simplified(df_backtested,
@@ -597,7 +607,7 @@ def backtest(model_name,
                                       figsize=figsize,
                                       fees = fee,
                                       kline_to_trade = kline_to_trade)
-        elif plots == "ppt":
+        elif plots is True:
             backtest_plots_ppt(df_backtested,
                                df_trades,
                                 df_summary,#[["total","buyhold"]], 
@@ -610,7 +620,7 @@ def backtest(model_name,
                                 kline_to_trade = kline_to_trade,
                                 to_drop=metrics_table_item_to_drop,
                                 file_name = file_name)
-        elif plots is True:
+        elif plots == "full":
             backtest_plots(df_backtested,
                            df_summary[["total", "longs only", "shorts only"]],
                            horizon_labels=horizon_labels,
