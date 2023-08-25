@@ -477,9 +477,11 @@ def calc_tide(open_i: np.array,
     w_0 = 0
     for w in windows:
         w_i = calc_exponential_height(heights, w)
+        # print(f"w_0: {w_0}, w_i: {w_i}, w: {w}: heights: {heights}")
         if w_i > w_0:
             max_exp_height = w_i
             w_0 = w_i
+        # print(max_exp_height)
     # max_exp_height=max([calc_exponential_height(heights,w) for w in windows])#calc_exponential_height(prices,lengths[0]),calc_exponential_height(prices,lengths[1]),calc_exponential_height(prices,lengths[2]))    #THIS CAN BE CHANGED TO separate rolling functions#
 
     # sensitivity=sensitivity/100
@@ -632,15 +634,20 @@ def rolling_tide(np_col,
                 windows = np.array(windows)
                 threshold = int(threshold)
                 sensitivity = float(sensitivities[0])
-                tide_i, ebb_i, flow_i = calc_tide(open_i=open_i,
-                                                high_i=high_i,
-                                                low_i=low_i,
-                                                previous_tide=previous_tide,
-                                                previous_ebb=previous_ebb,
-                                                previous_flow=previous_flow,
-                                                windows=windows,
-                                                thresholds=threshold,
-                                                sensitivity=sensitivity) # to be generalised next
+                try:
+                    # print(f"\ni: {i}, np_col = {np_col[:,1]}\n")
+                    tide_i, ebb_i, flow_i = calc_tide(open_i=open_i,
+                                                    high_i=high_i,
+                                                    low_i=low_i,
+                                                    previous_tide=previous_tide,
+                                                    previous_ebb=previous_ebb,
+                                                    previous_flow=previous_flow,
+                                                    windows=windows,
+                                                    thresholds=threshold,
+                                                    sensitivity=sensitivity) # to be generalised next
+                except Exception as e:
+                    raise Exception(f"i: {i}, np_col = {np_col[:,1]}\nerror: {e}\n\n")
+                    # tide_i, ebb_i, flow_i = np.nan, np.nan, np.nan
                 # print(f"t:{t} w:{w} th:{th} ---> windows={windows}, threshold={threshold}, sensitivity={sensitivities[0]}")
                 
                 tide_i_np[th, w] = tide_i
@@ -730,19 +737,22 @@ def calc_tide_sig(df0,
     Returns:
         A new data set with the tide, ebb, and flow signals added.
     """
-
+    # print(df0.head(20))
     df = df0.copy() # if somehow need to save initial state of df before adding signals
-    df["date_time"] = df.index
+    df["date_time"] = df.index  
     for cols in tqdm(cols_set):
+        df[cols] = df[cols].copy().fillna(method='ffill')
         if dynamic_param_col is not None:
             col_names = ['date_time']+cols+dynamic_param_col
             col_index = find_list_index(col_names, dynamic_param_col)
+            # print(f"=========> col_index: {col_index}")
             np_col = df[col_names].values
+            # print(f"col_names: {col_names}, df[col_names]: {df[col_names].head(10)}")
         else:
             col_names = ['date_time']+cols
             np_col = df[col_names].values
          # THIS COULD BE SOURCE OF POTENTIAL POINTER / COPY ERROR 
-
+        # print(f"cols: {cols}, np_col: {np_col}")
         tide,ebb,flow = rolling_tide(np_col,
                                      param_func_tide = param_func_tide,
                                      fixed_window = fixed_window,
@@ -832,6 +842,7 @@ def rolling_zscore(np_col,
     windows, thresholds = param_func_Z(np_col, 0, col_index)
     max_lookback = np.max(windows) # this could be list
     z_i_np = np.full((len(windows)), np.nan)
+    # print(z_i_np)
     z_list = [z_i_np]*max_lookback
 
     sigs_i = np.full((len(windows), len(thresholds)), np.nan)
@@ -840,6 +851,7 @@ def rolling_zscore(np_col,
     # print(f"len(np_col): {len(np_col)}")
     for i in tqdm(range(max_lookback,n+1)):
         windows, thresholds = param_func_Z(np_col, i, col_index)
+        # print(f"i: {i}, windows: {windows}")
         sigs_i = np.full((len(windows), len(thresholds)), np.nan)
         for w, window in enumerate(windows):
             price_i=np_col[i-window+1:i+1,1].astype(float)
@@ -849,7 +861,7 @@ def rolling_zscore(np_col,
 
             if (len(ret) == 0) or (np.std(ret) == 0.0):
                 res = 0
-                z_i_np[i]=res
+                z_i_np[w]=res
             else:
                 res = (ret[-1] - np.mean(ret))/np.std(ret)
                 z_i_np[w] = res
@@ -902,15 +914,16 @@ def calc_z_sig(df0,
     for col in tqdm(cols_set):
         # print(f"col: {col}")
         if dynamic_param_col is not None:
+            df[col] = df[col].copy().fillna(method='ffill')
             col_names = ['date_time']+col+dynamic_param_col
             # print(f"find_list_index(col_names, dynamic_param_col)\nfind_list_index({col_names}, {dynamic_param_col})")
             col_index = find_list_index(col_names, dynamic_param_col)
-            print(f"col_index: {col_index}")
+            # print(f"col_index: {col_index}")
             np_col = df[col_names].values
         else:
             col_names = ['date_time']+col
             np_col = df[col_names].values
-        # print(f"len np_col: {len(np_col)}")
+        # print(f"col: {col} np_col: {np_col}")
         z,sigs= rolling_zscore(np_col=np_col,
                               param_func_Z = param_func_Z,
                               col_index=col_index)
