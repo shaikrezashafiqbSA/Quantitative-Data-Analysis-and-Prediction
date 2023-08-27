@@ -199,6 +199,56 @@ def get_z_sig(i,np_closePx, signals_dict, sig_lag=0, position="long",side="buy",
 
     return signal
 
+def get_z_sig_TP(i,np_closePx, signals_dict, sig_lag=0, position="long",side="buy",**kwargs)-> bool:
+    L_buy=kwargs.get("L_buy",1)
+    L_sell=kwargs.get("L_sell",1)
+    S_buy=kwargs.get("S_buy",-1)
+    S_sell=kwargs.get("S_sell",-1)
+    # This kwargs.get does: if kwargs.get("L_buy",1) exists, then use that value, else use 1
+    sig_lagged = i -sig_lag
+    if sig_lagged >= i-1:
+        sig_lagged = i
+    
+    if position == "long":        
+        if side == "buy": 
+            sig_change = signals_dict["sig"][sig_lagged] >=L_buy
+            # macro_tide_change = (signals_dict["Y"][i] > 0 and signals_dict["Y"][i-1] < 0)
+            signal = sig_change# and macro_tide_change
+        elif side == "sell":
+            sig_change = signals_dict["sig"][sig_lagged] <L_sell
+            # profitable_RR = signals_dict[f"sig_short_ub_RRRatio3"][i] < 1 # Risk > reward disproportionately. 
+
+
+            # SL2_hit = (np_closePx[i] < signals_dict["sig_long_SL2"][i-1]) and (np_closePx[i-1] > signals_dict["sig_long_SL2"][i-2]) 
+            # TP2_hit = (np_closePx[i] > signals_dict["sig_long_TP2"][i-1]) and (np_closePx[i-1] < signals_dict["sig_long_TP2"][i-2])
+
+            # SL3_hit = (np_closePx[i] < signals_dict["sig_long_SL3"][i-1]) and (np_closePx[i-1] > signals_dict["sig_long_SL3"][i-2]) 
+            # TP3_hit = (np_closePx[i] > signals_dict["sig_long_TP3"][i-1]) and (np_closePx[i-1] < signals_dict["sig_long_TP3"][i-2])
+
+            # signal = sig_change or (SL1_hit or TP1_hit) or (SL2_hit or TP2_hit) or (SL3_hit or TP3_hit)
+            signal = sig_change #or ((SL2_hit and profitable_RR) or (TP2_hit and not profitable_RR)) or ((SL3_hit and profitable_RR) or (TP3_hit and not profitable_RR))
+
+        
+    elif position == "short":
+        if side == "buy": 
+            sig_change = signals_dict["sig"][sig_lagged] <= S_buy
+            # macro_tide_change = (signals_dict["Y"][i] < 0 and signals_dict["Y"][i-1] > 0)
+            signal = sig_change #and macro_tide_change
+
+        elif side == "sell":
+            sig_change = signals_dict["sig"][sig_lagged] > S_sell
+            # profitable_RR = signals_dict[f"sig_short_ub_RRRatio3"][i] < 1 # Risk > reward disproportionately. 
+
+            # SL2_hit = (np_closePx[i] > signals_dict["sig_short_SL2"][i-1]) and (np_closePx[i-1] < signals_dict["sig_short_SL2"][i-2]) 
+            # TP2_hit = (np_closePx[i] < signals_dict["sig_short_TP2"][i-1]) and (np_closePx[i-1] > signals_dict["sig_short_TP2"][i-2])
+
+            # SL3_hit = (np_closePx[i] > signals_dict["sig_short_SL3"][i-1]) and (np_closePx[i-1] < signals_dict["sig_short_SL3"][i-2]) 
+            # TP3_hit = (np_closePx[i] < signals_dict["sig_short_TP3"][i-1]) and (np_closePx[i-1] > signals_dict["sig_short_TP3"][i-2])
+            # signal = sig_change or (SL1_hit or TP1_hit) or (SL2_hit or TP2_hit) or (SL3_hit or TP3_hit)
+            signal = sig_change #or ((SL2_hit) or (TP2_hit and profitable_RR)) or ((SL3_hit) or (TP3_hit and profitable_RR))
+
+    return signal
+
 
 def get_signal_Y(i,np_closePx, signals_dict, sig_lag=0, position="long",side="buy",entry_i = None)-> bool:
             
@@ -250,6 +300,8 @@ class model:
             _get_signal = get_signal_strengths_w_macros
         elif signal_function == "z_sig":
             _get_signal = model.get_z_sig
+        elif signal_function == "z_sig_TP":
+            _get_signal = model.get_z_sig_TP
         elif signal_function == "default":
             _get_signal = get_signal_default
         else:

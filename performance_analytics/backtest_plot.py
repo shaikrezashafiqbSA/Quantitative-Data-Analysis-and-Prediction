@@ -432,7 +432,7 @@ def backtest_plots_ppt(df,
     
     ax_pct_aum = plt.subplot2grid(shape=(4,6), loc=(3,4), colspan=4)
 
-
+        # print(f"========????? bins_df['%']{bins_df}")
 
     # ax_key_pnl = plt.subplot2grid(shape=(4,6), loc=(1,0), colspan=6)
     # ax_table = plt.subplot2grid(shape=(4,6), loc=(0,0), colspan=6)
@@ -664,7 +664,7 @@ def backtest_plots_ppt(df,
     bins_df["Total Traded Vol"] = dft.groupby(pd.PeriodIndex(dft.index, freq="Y"))["vol_traded"].sum()
     bins_df["AUM end"] = dft.groupby(pd.PeriodIndex(dft.index, freq="Y"))["AUM"].apply(lambda x: x.iloc[-1])
     bins_df["%"] = bins_df["Total Traded Vol"]/bins_df["AUM end"]*100 
-    
+
     bins_df[["%"]].plot(kind="bar",ax=ax_pct_aum,color=["purple"])#.axhline(color="red",linewidth=0.5, linestyle="--", alpha=0.75)#.axhline(0,color="red"
     ax_pct_aum.tick_params(axis='both', which='major', labelsize=6)
     ax_pct_aum.tick_params(axis='both', which='minor', labelsize=4)

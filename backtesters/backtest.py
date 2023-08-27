@@ -141,7 +141,7 @@ def _backtest(model_name,
     signals_dict = {}
 
     for signal in signals:
-        print(signal)
+        # print(signal)
         signals_dict[signal] = df[signal].values
 
         
@@ -163,6 +163,8 @@ def _backtest(model_name,
         _get_signal = model.get_signal_default
     elif signal_function == "z_sig":
         _get_signal = model.get_z_sig
+    elif signal_function == "z_sig_TP":
+        _get_signal = model.get_z_sig_TP
     elif signal_function == "meta":
         _get_signal = get_signal_meta
     elif signal_function == "Y":
@@ -595,6 +597,9 @@ def backtest(model_name,
                                                                 N=N,
                                                                 timeframe=timeframe,
                                                                 )
+        # print(df_trades)
+        if len(df_trades) == 0:
+            raise Exception("No trades generated")
         dur_metrics = np.round(time.time()-t0,3)
         # print(df_backtested.columns)
         t0=time.time()

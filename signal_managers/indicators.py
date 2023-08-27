@@ -954,7 +954,97 @@ def calc_z_sig(df0,
     return df1
 
 
+def calc_sig_strengths(df0, 
+                        signal = "sig",
+                        penalty = 1, # this widens the SL so that it is not hit too often
+                        tp_position_dict = {"TP1": {"long":{"lookback":3, "qtl": 0.3}, 
+                                                    "short": {"lookback":3, "qtl":0.3}
+                                                    },
+                                            "TP2": {"long":{"lookback":6, "qtl": 0.66}, 
+                                                    "short": {"lookback":6, "qtl":0.66}
+                                                    },
+                                            "TP3": {"long":{"lookback":9, "qtl": 0.99}, 
+                                                    "short": {"lookback":9, "qtl":0.99}
+                                                    }
+                                            }
+                        ):
+    df = df0.copy()
 
+    # print(df["S_positions"])
+    # create a column to track the change in tide
+    df[f'short_change'] = df["S_positions"].diff().ne(0).cumsum()
+    df[f'long_change'] = df["L_positions"].diff().ne(0).cumsum()
+    # create a column to count the duration of each tide
+    df[f'{signal}_short_dur'] = df.groupby(f'short_change').cumcount() +1
+    df[f'{signal}_long_dur'] = df.groupby(f'long_change').cumcount() +1
+    # calculate percentile for tide_dur
+    df[f'{signal}_short_dur'] = df[f'{signal}_short_dur'].shift(1)
+    df[f'{signal}_long_dur'] = df[f'{signal}_long_dur'].shift(1)
+
+    # df.drop(columns=[f'short_change'], inplace=True)
+    # df.drop(columns=[f'long_change'], inplace=True)
+
+    df[f"{signal}_short_strength_t"] = np.where((df["S_rpnl"]>0), df[f'{signal}_short_dur'], np.nan)
+    df[f"{signal}_short_weakness_t"] = np.where((df["S_rpnl"]<0), df[f'{signal}_short_dur'], np.nan)
+
+    df[f"{signal}_long_strength_t"] = np.where((df["L_rpnl"]>0), df[f'{signal}_long_dur'], np.nan)
+    df[f"{signal}_long_weakness_t"] = np.where((df["L_rpnl"]<0), df[f'{signal}_long_dur'], np.nan)
+
+    # could have for multiple tide speeds, fast or slow
+    df[f"{signal}_short_strength"] = np.where((df["S_rpnl"]>0), df["S_rpnl"], np.nan)
+    df[f"{signal}_short_weakness"] = np.where((df["S_rpnl"]<0), df["S_rpnl"], np.nan)
+
+    df[f"{signal}_long_strength"] = np.where((df["L_rpnl"]>0), df["L_rpnl"], np.nan)
+    df[f"{signal}_long_weakness"] = np.where((df["L_rpnl"]<0), df["L_rpnl"], np.nan)
+    # df["tide_short_str"] = np.where(df["tide"] > 0, df["S_pnl"], np.nan)
+    # df["tide_long_str"] = np.where(df["tide"] < 0, df["L_pnl"], np.nan)
+
+    # ALERT: tide_long_this should look at str_window amounts of tide-strengths, not str_window number of time periods
+    # df["tide_short_z"] = calc_rolling_sr(df["tide_short_str"].dropna().values, window=str_window)
+    # df["tide_long_z"] = calc_rolling_sr(df["tide_long_str"].dropna().values, window=str_window)
+
+    for tp in ["TP1", "TP2", "TP3"]:
+        for position in ["long", "short"]:
+            # print(f"{tp} --> {position}")
+            try:
+                lookback = tp_position_dict[tp][position]["lookback"]
+            except Exception as e:
+                print(f"tp_position_dict[{tp}][{position}] does not exist: {e}")
+                continue
+            qtl = tp_position_dict[tp][position]["qtl"]
+            df[f"{signal}_{position}_{tp}_strength"] = df[f"{signal}_{position}_strength"].dropna().rolling(lookback).quantile(qtl)
+            df[f"{signal}_{position}_{tp}_strength"]=df[f"{signal}_{position}_{tp}_strength"].fillna(method="ffill")
+
+            df[f"{signal}_{position}_{tp}_weakness"] = df[f"{signal}_{position}_weakness"].dropna().rolling(lookback).quantile(1-qtl)
+            df[f"{signal}_{position}_{tp}_weakness"]=df[f"{signal}_{position}_{tp}_weakness"].fillna(method="ffill")
+
+            df[f"{signal}_{position}_{tp}_strength_t"] = df[f"{signal}_{position}_strength_t"].dropna().rolling(lookback).quantile(qtl)#-1
+            df[f"{signal}_{position}_{tp}_strength_t"]=df[f"{signal}_{position}_{tp}_strength_t"].fillna(method="ffill")
+
+            df[f"{signal}_{position}_{tp}_weakness_t"] = df[f"{signal}_{position}_weakness_t"].dropna().rolling(lookback).quantile(1-qtl)#-1
+            df[f"{signal}_{position}_{tp}_weakness_t"]= df[f"{signal}_{position}_{tp}_weakness_t"].fillna(method="ffill")
+
+            if position == "long":
+                x = 1 
+            elif position == "short":
+                x = -1
+
+            # PRICE TP and SL
+            df[f"{signal}_{position}_{tp}"] = df["close"] +x*df[f"{signal}_{position}_{tp}_strength"] 
+            df[f"{signal}_{position}_SL{tp[-1]}"] = df["close"] - penalty*abs(df[f"{signal}_{position}_{tp}_weakness"])
+
+            # TIME TP AND SL
+            df[f"{signal}_{position}_{tp}_t"] = df[f"{signal}_{position}_{tp}_strength_t"] 
+            df[f"{signal}_{position}_SL{tp[-1]}_t"] = df[f"{signal}_{position}_{tp}_weakness_t"]
+
+            # df[f"tide_{position}_{tp}"]=df[f"tide_{position}_{tp}"].fillna(method="ffill")
+
+            # Risk reward ratio
+            df[f"{signal}_{position}_RRRatio{tp[-1]}"] = abs(df["close"]-df[f"{signal}_{position}_SL{tp[-1]}"])/abs(df["close"] - df[f"{signal}_{position}_{tp}"])
+            df[f"{signal}_{position}_ub_RRRatio{tp[-1]}"] = df[f"{signal}_{position}_RRRatio{tp[-1]}"].dropna().rolling(lookback).quantile(qtl)#-1
+            df[f"{signal}_{position}_lb_RRRatio{tp[-1]}"] = df[f"{signal}_{position}_RRRatio{tp[-1]}"].dropna().rolling(lookback).quantile(1-qtl)#-1
+
+    return df
 # ============================================================================================================================================
 # ============================================================================================================================================
 #                               Tides Derivatives
