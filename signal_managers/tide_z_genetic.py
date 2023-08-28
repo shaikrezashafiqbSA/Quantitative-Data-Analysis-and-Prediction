@@ -167,149 +167,27 @@ def objective_function(df=None,
                       mutate_signals_w_TP = False,
                       tradable_times = None, #[["00:05", "23:50"]]
                       closing_session_times= None, #[["23:50", "00:00"]]
+                      debug_verbose=True,
                       **kwargs):
 
-    # =======================
-    # BACKTEST
-    # =======================
+        # =======================
+        # BACKTEST
+        # =======================
+        print(f"\n{'='*30}\n(1) Generate base z-signal to backtest so that can generate positions taken\n{'='*30}\n")
+
+        model_name= "Trend_Following"
+        signal_function="z_sig"
 
 
-    model_name= "Trend_Following"
-    signal_function="z_sig"
+        title = f"{timeframe_to_trade} {instrument_to_trade} Tide Z spot | fees: {fee*1e4} bps"
+        file_name = f"{timeframe_to_trade} {instrument_to_trade} Tide Z"
 
-
-    title = f"{timeframe_to_trade} {instrument_to_trade} Tide Z spot | fees: {fee*1e4} bps"
-    file_name = f"{timeframe_to_trade} {instrument_to_trade} Tide Z"
-
-    df_sig = df.copy()
-    # df_sig["sig"] = df_sig[signals_to_trade]#.shift(-1).fillna(method="ffill")
-    # df_trade = df_sig[backtest_window[0]:backtest_window[1]].copy()
-    # signals_to_trade= ["sig",signals_to_trade]
-
-    df_trade = df_sig[backtest_window[0]:backtest_window[1]].copy()
-    df_trade["sig"] = df_trade[signals_to_trade]#.shift(-1).fillna(method="ffill")
-    signals_to_trade= ["sig"]
-    df_backtested,df_trades,df_summary = backtest.backtest(model_name= model_name,
-                                                    df0=df_trade,
-                                                    timeframe=timeframe_to_trade,
-                                                    kline_to_trade=kline_to_trade,
-                                                    volume_to_trade = volume_to_trade,
-                                                    tradable_times = tradable_times,
-                                                    closing_session_times = closing_session_times,
-                                                    position_sizing_to_trade=None,
-                                                    min_holding_period=min_holding_period,#/int(timeframe[:-1]),
-                                                    max_holding_period=max_holding_period,#/int(timeframe[:-1]),
-                                                    sig_lag=sig_lag,
-                                                    fee=fee,
-                                                    slippage=slippage,
-                                                    long_equity = long_equity,
-                                                    short_equity = short_equity,
-                                                    long_notional=long_notional,
-                                                    short_notional=short_notional,
-                                                    signals=signals_to_trade, 
-                                                    signal_function=signal_function, 
-                                                    figsize=figsize, # width, height
-                                                    show_B=True,
-                                                    show_LS=True,
-                                                    title=title,
-                                                    file_name=file_name,
-                                                    plots=show_plots,
-                                                    diagnostics_verbose=False,
-                                                    trail_SL = None,
-                                                    trail_TP = None,
-                                                    trail_increment = None,
-                                                    N=365*24,
-                                                    **kwargs)
-
-    # =======================
-    # Mutate new tide strategy
-    # =======================
-    # has to have muateted something necessary for survival or remove unnecessary traits
-    # 1. mutate the tide by adding a new window
-    # 2. mutate the TP by adding a new window
-    # 3. mutate the SL by adding a new window
-
-    if mutate_signals_w_TP:
-
-        dfmtzTP = indicators.calc_sig_strengths(df_backtested, 
-                        signal = "sig",
-                        penalty = 1, # this widens the SL so that it is not hit too often
-                        tp_position_dict = {"TP1": {"long":{"lookback":3, "qtl": 0.1}, 
-                                                    "short": {"lookback":3, "qtl":0.1}
-                                                    },
-                                            "TP2": {"long":{"lookback":6, "qtl": 0.36}, 
-                                                    "short": {"lookback":6, "qtl":0.36}
-                                                    },
-                                            "TP3": {"long":{"lookback":9, "qtl": 0.69}, 
-                                                    "short": {"lookback":9, "qtl":0.69}
-                                                    }
-                                            }
-                        )
-        
-        signal_function="z_sig_TP"
-        # Settings for long or short bias, since different trajectories with either
-
-        # print(df_sig["sig"].hist())
+        df_sig = df.copy()
         # df_sig["sig"] = df_sig[signals_to_trade]#.shift(-1).fillna(method="ffill")
-        df_trade = dfmtzTP[backtest_window[0]:backtest_window[1]].copy()
-        df_trade["sig"] = df_trade[signals_to_trade]#.shift(-1).fillna(method="ffill")
-        signals_to_trade= ["sig"]
-        df_backtested,df_trades,df_summary = backtest.backtest(model_name= model_name,
-                                                        df0=df_trade,
-                                                        timeframe=timeframe_to_trade,
-                                                        kline_to_trade=kline_to_trade,
-                                                        volume_to_trade = volume_to_trade,
-                                                        tradable_times = tradable_times,
-                                                        closing_session_times = closing_session_times,
-                                                        position_sizing_to_trade=None,
-                                                        min_holding_period=min_holding_period,#/int(timeframe[:-1]),
-                                                        max_holding_period=max_holding_period,#/int(timeframe[:-1]),
-                                                        sig_lag=sig_lag,
-                                                        fee=fee,
-                                                        slippage=slippage,
-                                                        long_equity = long_equity,
-                                                        short_equity = short_equity,
-                                                        long_notional=long_notional,
-                                                        short_notional=short_notional,
-                                                        signals=signals_to_trade, 
-                                                        signal_function=signal_function, 
-                                                        figsize=figsize, # width, height
-                                                        show_B=True,
-                                                        show_LS=True,
-                                                        title=title,
-                                                        file_name=file_name,
-                                                        plots=False,
-                                                        diagnostics_verbose=False,
-                                                        trail_SL = None,
-                                                        trail_TP = None,
-                                                        trail_increment = None,
-                                                        N=365*24
-                                                        )
+        # df_trade = df_sig[backtest_window[0]:backtest_window[1]].copy()
+        # signals_to_trade= ["sig",signals_to_trade]
 
-        df_backtested = mutate_signals(df_backtested,signals_to_trade)
-
-        # 1st round of mutated backtest
-        dfmtzTP = indicators.calc_sig_strengths(df_backtested, 
-                        signal = "sig",
-                        penalty = 1, # this widens the SL so that it is not hit too often
-                        tp_position_dict = {"TP1": {"long":{"lookback":3, "qtl": 0.1}, 
-                                                    "short": {"lookback":3, "qtl":0.1}
-                                                    },
-                                            "TP2": {"long":{"lookback":6, "qtl": 0.36}, 
-                                                    "short": {"lookback":6, "qtl":0.36}
-                                                    },
-                                            "TP3": {"long":{"lookback":9, "qtl": 0.69}, 
-                                                    "short": {"lookback":9, "qtl":0.69}
-                                                    }
-                                            }
-                        )
-        
-        signal_function="z_sig_TP"
-        # Settings for long or short bias, since different trajectories with either
-
-        # print(df_sig["sig"].hist())
-        # df_sig["sig"] = df_sig[signals_to_trade]#.shift(-1).fillna(method="ffill")
-        df_trade = dfmtzTP[backtest_window[0]:backtest_window[1]].copy()
+        df_trade = df_sig[backtest_window[0]:backtest_window[1]].copy()
         df_trade["sig"] = df_trade[signals_to_trade]#.shift(-1).fillna(method="ffill")
         signals_to_trade= ["sig"]
         df_backtested,df_trades,df_summary = backtest.backtest(model_name= model_name,
@@ -341,43 +219,197 @@ def objective_function(df=None,
                                                         trail_SL = None,
                                                         trail_TP = None,
                                                         trail_increment = None,
+                                                        N=365*24,
+                                                        **kwargs)
+
+
+        print(f"\n{'-'*20}\n---> (2) TP based strategy \n{'-'*20}\n")
+        dfmtzTP = indicators.calc_sig_strengths(df_backtested, 
+                        signal = "sig",
+                        penalty = 1, # this widens the SL so that it is not hit too often
+                        tp_position_dict = {"TP1": {"long":{"lookback":5, "qtl": 0.1}, 
+                                                    "short": {"lookback":3, "qtl":0.3}
+                                                    },
+                                            "TP2": {"long":{"lookback":5, "qtl": 0.1}, 
+                                                    "short": {"lookback":6, "qtl":0.6}
+                                                   },
+                                            "TP3": {"long":{"lookback":9, "qtl": 0.9}, 
+                                                    "short": {"lookback":9, "qtl":0.9}
+                                                   }
+                                           }
+                        )
+
+        signal_function="z_sig_TP"
+        # Settings for long or short bias, since different trajectories with either
+
+        # print(df_sig["sig"].hist())
+
+        """
+        This part here should be the same as the base strategy, but with the new TP overlays eg:
+        - TP1_long hit but not TP1_long_t so even though z_signal has flipped, lets chill first
+        - TP1_long hit and TP1_long_t hit so lets close the position
+        - TP1_long hit and TP1_long_t not hit so lets close the position if risk reward is high
+        """
+        # df_sig["sig"] = df_sig[signals_to_trade]#.shift(-1).fillna(method="ffill")
+        # print(dfmtzTP.filter(regex="sig_long_SL2")) there is sig_long_SL2 here 
+        df_trade = dfmtzTP[backtest_window[0]:backtest_window[1]].copy()
+        # df_trade["sig"] = df_trade[signals_to_trade]#.shift(-1).fillna(method="ffill")
+        signals_to_trade= list(df_trade.columns)
+        df_backtested,df_trades,df_summary = backtest.backtest(model_name= model_name,
+                                                        df0=df_trade,
+                                                        timeframe=timeframe_to_trade,
+                                                        kline_to_trade=kline_to_trade,
+                                                        volume_to_trade = volume_to_trade,
+                                                        tradable_times = tradable_times,
+                                                        closing_session_times = closing_session_times,
+                                                        position_sizing_to_trade=None,
+                                                        min_holding_period=min_holding_period,#/int(timeframe[:-1]),
+                                                        max_holding_period=max_holding_period,#/int(timeframe[:-1]),
+                                                        sig_lag=sig_lag,
+                                                        fee=fee,
+                                                        slippage=slippage,
+                                                        long_equity = long_equity,
+                                                        short_equity = short_equity,
+                                                        long_notional=long_notional,
+                                                        short_notional=short_notional,
+                                                        signals=signals_to_trade, 
+                                                        signal_function=signal_function, 
+                                                        figsize=figsize, # width, height
+                                                        show_B=True,
+                                                        show_LS=True,
+                                                        title=title,
+                                                        file_name=file_name,
+                                                        plots=True,
+                                                        diagnostics_verbose=False,
+                                                        trail_SL = None,
+                                                        trail_TP = None,
+                                                        trail_increment = None,
                                                         N=365*24
                                                         )
-        
-        cols_to_seek = ["sig","L_positions","L_entry_price","L_exit_price", "S_positions","S_entry_price","S_exit_price"]
-        L_id_to_seek = df_backtested["L_id"].dropna().iloc[-1]
-        print(f"{'===='*20}\nAFTER MUTATED BACKTEST\n{'===='*20}\n-->\n{L_id_to_seek}")
-        df_to_print = df_backtested[df_backtested["L_id"]==L_id_to_seek][cols_to_seek]
-        print(df_to_print.head(2))
-        print(df_to_print.tail(2))
-        
-        return df_backtested, df_trades, df_summary
+    # =======================
+    # Mutate new tide strategy
+    # =======================
+    # has to have muateted something necessary for survival or remove unnecessary traits
+    # 1. mutate the tide by adding a new window
+    # 2. mutate the TP by adding a new window
+    # 3. mutate the SL by adding a new window
 
-    else:
-        return df_backtested, df_trades, df_summary
+        if mutate_signals_w_TP:
+                print(f"\n{'='*30}\n(2) MUTATING SIGNALS USING TP\n{'='*30}\n")
 
-def mutate_signals(df,sig):
-    # print(sig)
-    # print(df["L_positions"]>0)
-    cols_to_seek = ["sig","L_positions","L_entry_price","L_exit_price", "S_positions","S_entry_price","S_exit_price"]
-    # print(f"{'===='*20}\BEFORE SIGNAL MUTATION\n{'===='*20}-->\n{df['L_id'].dropna().iloc[-1]}")
-    # print(df[df["L_id"]==10][cols_to_seek])
-    L_TP_signal_concur = all(df["L_positions"].values>0)
-    S_TP_signal_concur = all(df["S_positions"].values<0)
+                # 1st round of mutated backtest
+                dfmtzTP = indicators.calc_sig_strengths(df_backtested, 
+                                signal = "sig",
+                                penalty = 1, # this widens the SL so that it is not hit too often
+                                tp_position_dict = {"TP1": {"long":{"lookback":3, "qtl": 0.3}, 
+                                                        "short": {"lookback":3, "qtl":0.3}
+                                                        },
+                                                "TP2": {"long":{"lookback":6, "qtl": 0.6}, 
+                                                        "short": {"lookback":6, "qtl":0.6}
+                                                        },
+                                                "TP3": {"long":{"lookback":9, "qtl": 0.9}, 
+                                                        "short": {"lookback":9, "qtl":0.9}
+                                                        }
+                                                }
+                                )
+                dfmtzTP = mutate_signals(dfmtzTP,signals_to_trade)
 
+
+                signal_function="z_sig_TP"
+                # Settings for long or short bias, since different trajectories with either
+
+                # print(df_sig["sig"].hist())
+                # df_sig["sig"] = df_sig[signals_to_trade]#.shift(-1).fillna(method="ffill")
+                df_trade = dfmtzTP[backtest_window[0]:backtest_window[1]].copy()
+                df_trade["sig"] = df_trade[signals_to_trade]#.shift(-1).fillna(method="ffill")
+                signals_to_trade= ["sig"]
+                df_backtested,df_trades,df_summary = backtest.backtest(model_name= model_name,
+                                                                df0=df_trade,
+                                                                timeframe=timeframe_to_trade,
+                                                                kline_to_trade=kline_to_trade,
+                                                                volume_to_trade = volume_to_trade,
+                                                                tradable_times = tradable_times,
+                                                                closing_session_times = closing_session_times,
+                                                                position_sizing_to_trade=None,
+                                                                min_holding_period=min_holding_period,#/int(timeframe[:-1]),
+                                                                max_holding_period=max_holding_period,#/int(timeframe[:-1]),
+                                                                sig_lag=sig_lag,
+                                                                fee=fee,
+                                                                slippage=slippage,
+                                                                long_equity = long_equity,
+                                                                short_equity = short_equity,
+                                                                long_notional=long_notional,
+                                                                short_notional=short_notional,
+                                                                signals=signals_to_trade, 
+                                                                signal_function=signal_function, 
+                                                                figsize=figsize, # width, height
+                                                                show_B=True,
+                                                                show_LS=True,
+                                                                title=title,
+                                                                file_name=file_name,
+                                                                plots=show_plots,
+                                                                diagnostics_verbose=False,
+                                                                trail_SL = None,
+                                                                trail_TP = None,
+                                                                trail_increment = None,
+                                                                N=365*24
+                                                                )
+                
+                # START OUTPUT PRINTS =============================================================================================
+                if debug_verbose:
+                        cols_to_seek = ["L_id","sig","L_positions","L_entry_price","L_exit_price", "S_positions","S_entry_price","S_exit_price"]
+                        L_id_to_seek = df["L_id"].dropna().iloc[-1]
+                        print(f"{'===='*20}\nAFTER SIGNAL MUTATION\n{'===='*20}\n-->\n{L_id_to_seek}")
+                        df_to_print = df[df["L_id"] in L_id_to_seek][cols_to_seek]
+                        print(df_to_print.head(3))
+                        print(df_to_print.tail(3))
+                # END PRINTS ======================================================================================================
+                df_to_print = df_backtested[df_backtested["L_id"]==L_id_to_seek][cols_to_seek]
+                print(df_to_print.head(2))
+                print(df_to_print.tail(2))
+                
+                return df_backtested, df_trades, df_summary
+
+        else:
+                return df_backtested, df_trades, df_summary
+
+def mutate_signals(df,sigs, debug_verbose = True):
+    sig = sigs[0]
+    print(f"sig from sigs -----> {sig} from {sigs}")
+    # START OUTPUT PRINTS ============================================================================================
+    if debug_verbose:
+        cols_to_seek = ["L_id","sig","L_positions","L_entry_price","L_exit_price", "S_positions","S_entry_price","S_exit_price"]
+        L_id_to_seek = df["L_id"].dropna().iloc[-1]  
+        print(f"{'===='*20}\nBEFORE SIGNAL MUTATION\n{'===='*20}\n-->\n{df['L_id'].dropna().iloc[-1]}")
+        df_to_print = df[df["L_id"]==L_id_to_seek][cols_to_seek]
+        print(df_to_print.head(3))
+        print(df_to_print.tail(3))
+    # END PRINTS ======================================================================================================
+
+    # TP signal mutation
+    # L_TP_signal_concur = all(df["L_positions"].values>0)
+    # S_TP_signal_concur = all(df["S_positions"].values<0)
+    L_TP_signal_concur = np.where(df["L_positions"]>0,True,False)
+    S_TP_signal_concur = np.where(df["S_positions"]<0,True,False)
     # print(df[sig].values>0)
-    L_sig_concur = all(df[sig].values >0)
-    S_sig_concur = all(df[sig].values >0)
-
-    df[sig] = np.where(L_TP_signal_concur & L_sig_concur,2,-2)
-    df[sig] = np.where(S_TP_signal_concur & S_sig_concur,-2,2)
-
-
-    L_id_to_seek = df["L_id"].dropna().iloc[-1]
-    print(f"{'===='*20}\nAFTER SIGNAL MUTATION\n{'===='*20}\n-->\n{L_id_to_seek}")
-    df_to_print = df[df["L_id"]==L_id_to_seek][cols_to_seek]
-    print(df_to_print.head(2))
-    print(df_to_print.tail(2))
+    # L_sig_concur = all(df[sig].values >0)
+    # S_sig_concur = all(df[sig].values >0)
+    L_sig_concur = np.where(df[sig]>0,True,False)
+    S_sig_concur = np.where(df[sig]<0,True,False)
+    print(f"L_TP_signal_concur: {L_TP_signal_concur[20:40]} ||| L_sig_concur: {L_sig_concur[20:40]}")
+#     print(f"L_TP_signal_concur: {np.shape(L_TP_signal_concur)} ||| L_sig_concur: {np.shape(L_sig_concur)} || len(df): {len(df)}")
+#     print(f"df: {np.shape(df)}")
+    
+    df[sig] = np.where(S_TP_signal_concur & S_sig_concur,-2,0) + np.where(L_TP_signal_concur & L_sig_concur,30,0)
+#     df[sig[0]] = np.where(L_TP_signal_concur & L_sig_concur,2,-2)
+    # START OUTPUT PRINTS =============================================================================================
+    if True:
+        L_id_to_seek = df["L_id"].iloc[20:40].min()
+        print(f"{'===='*20}\nAFTER SIGNAL MUTATION\n{'===='*20}\n-->\n{L_id_to_seek}")
+        df_to_print = df[df["L_id"]==L_id_to_seek][cols_to_seek]
+        print(df_to_print.head(3))
+        print(df_to_print.tail(3))
+    # END PRINTS ======================================================================================================
 
     return df
 

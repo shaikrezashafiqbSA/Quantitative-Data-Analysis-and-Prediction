@@ -216,7 +216,7 @@ def get_z_sig_TP(i,np_closePx, signals_dict, sig_lag=0, position="long",side="bu
             signal = sig_change# and macro_tide_change
         elif side == "sell":
             sig_change = signals_dict["sig"][sig_lagged] <L_sell
-            # profitable_RR = signals_dict[f"sig_short_ub_RRRatio3"][i] < 1 # Risk > reward disproportionately. 
+            profitable_RR = signals_dict[f"sig_long_RRRatio1"][i] < 1 # Risk > reward disproportionately. 
 
 
             # SL2_hit = (np_closePx[i] < signals_dict["sig_long_SL2"][i-1]) and (np_closePx[i-1] > signals_dict["sig_long_SL2"][i-2]) 
@@ -225,8 +225,8 @@ def get_z_sig_TP(i,np_closePx, signals_dict, sig_lag=0, position="long",side="bu
             # SL3_hit = (np_closePx[i] < signals_dict["sig_long_SL3"][i-1]) and (np_closePx[i-1] > signals_dict["sig_long_SL3"][i-2]) 
             # TP3_hit = (np_closePx[i] > signals_dict["sig_long_TP3"][i-1]) and (np_closePx[i-1] < signals_dict["sig_long_TP3"][i-2])
 
-            # signal = sig_change or (SL1_hit or TP1_hit) or (SL2_hit or TP2_hit) or (SL3_hit or TP3_hit)
-            signal = sig_change #or ((SL2_hit and profitable_RR) or (TP2_hit and not profitable_RR)) or ((SL3_hit and profitable_RR) or (TP3_hit and not profitable_RR))
+            signal = sig_change or profitable_RR
+            # signal = sig_change or ((SL2_hit and profitable_RR) or (TP2_hit and not profitable_RR)) or ((SL3_hit and profitable_RR) or (TP3_hit and not profitable_RR))
 
         
     elif position == "short":
@@ -237,15 +237,16 @@ def get_z_sig_TP(i,np_closePx, signals_dict, sig_lag=0, position="long",side="bu
 
         elif side == "sell":
             sig_change = signals_dict["sig"][sig_lagged] > S_sell
-            # profitable_RR = signals_dict[f"sig_short_ub_RRRatio3"][i] < 1 # Risk > reward disproportionately. 
+            profitable_RR = signals_dict[f"sig_short_RRRatio1"][i] < 1 # Risk > reward disproportionately. 
 
             # SL2_hit = (np_closePx[i] > signals_dict["sig_short_SL2"][i-1]) and (np_closePx[i-1] < signals_dict["sig_short_SL2"][i-2]) 
             # TP2_hit = (np_closePx[i] < signals_dict["sig_short_TP2"][i-1]) and (np_closePx[i-1] > signals_dict["sig_short_TP2"][i-2])
 
             # SL3_hit = (np_closePx[i] > signals_dict["sig_short_SL3"][i-1]) and (np_closePx[i-1] < signals_dict["sig_short_SL3"][i-2]) 
             # TP3_hit = (np_closePx[i] < signals_dict["sig_short_TP3"][i-1]) and (np_closePx[i-1] > signals_dict["sig_short_TP3"][i-2])
-            # signal = sig_change or (SL1_hit or TP1_hit) or (SL2_hit or TP2_hit) or (SL3_hit or TP3_hit)
-            signal = sig_change #or ((SL2_hit) or (TP2_hit and profitable_RR)) or ((SL3_hit) or (TP3_hit and profitable_RR))
+            
+            signal = sig_change or profitable_RR
+            # signal = sig_change or ((SL2_hit) or (TP2_hit and profitable_RR)) or ((SL3_hit) or (TP3_hit and profitable_RR))
 
     return signal
 
