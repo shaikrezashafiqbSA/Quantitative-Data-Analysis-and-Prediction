@@ -117,7 +117,7 @@ def initialise_parent(df=None,
                                                           short_notional= 5e5,
                                                           show_plots=True, 
                                                           figsize = (20,15), 
-                                                          mutate_signals = True,
+                                                          mutate_signals_w_TP = True,
                                                           tradable_times = None, #[["00:05", "23:50"]]
                                                           closing_session_times= None, #[["23:50", "00:00"]]
                                                           )
