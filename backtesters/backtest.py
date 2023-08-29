@@ -114,7 +114,7 @@ def _backtest(model_name,
               klines_tradable = "tradable",
               klines_session_closing = "session_closing",
               volume_to_trade = "5m_volume",
-              fee=0.0007,
+              fee=0.001,
               slippage = 0.0003, # 3bps for slippage
               long_notional=1000, # to be changed to dynamic position sizing
               short_notional=1000,
@@ -239,7 +239,8 @@ def _backtest(model_name,
     short_id = 1
     
 
-
+    long_closeIdx = 0
+    short_closeIdx = 0
     # t0=time.time()
     for i in tqdm(range(len(df)), disable=disable_tqdm):
         # TRADING TIMES FORMAT:  [02:45","05:25"] and ["07:15","09:50"]
@@ -258,7 +259,7 @@ def _backtest(model_name,
         # ---------- #
         
         if (not in_long_position) and tradable and not session_closing and long_notional>0:
-            signal = _get_signal(i,np_closePx,signals_dict, sig_lag=sig_lag, position="long",side="buy", **kwargs)
+            signal = _get_signal(i,np_closePx,signals_dict, sig_lag=sig_lag, position="long",side="buy",long_closeIdx = long_closeIdx, short_closeIdx = short_closeIdx, **kwargs)
             if signal:
                 # Trackers
                 np_long_positions[i] = 1
@@ -278,7 +279,7 @@ def _backtest(model_name,
         # ENTER SHORT
         # ---------- #
         if not in_short_position and tradable and not session_closing and short_notional>0:
-            signal = _get_signal(i,np_closePx, signals_dict, sig_lag=sig_lag, position="short",side="buy", **kwargs)
+            signal = _get_signal(i,np_closePx, signals_dict, sig_lag=sig_lag, position="short",side="buy",short_closeIdx = short_closeIdx, long_closeIdx = long_closeIdx, **kwargs)
             if signal:
                 # Trackers
                 np_short_positions[i] = -1
@@ -323,8 +324,8 @@ def _backtest(model_name,
                     np_long_trail_comments[i] = 0
                     long_ITM = False
             if min_holding_period_flag and ( signal_triggered_flag or tradable_but_session_closing or SL_triggered_flag) or max_holding_period_flag: 
-
                 # Trackers
+                long_closeIdx = i
                 np_long_positions[i] = 0
                 in_long_position = False
 
@@ -395,8 +396,8 @@ def _backtest(model_name,
                 
                 
             if min_holding_period_flag and (signal_triggered_flag or tradable_but_session_closing or SL_triggered_flag) or max_holding_period_flag:
-                
                 # Trackers
+                short_closeIdx = i
                 np_short_positions[i] = 0
                 in_short_position = False
 

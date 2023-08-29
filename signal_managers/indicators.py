@@ -960,11 +960,11 @@ def calc_sig_strengths(df0,
                         tp_position_dict = {"TP1": {"long":{"lookback":3, "qtl": 0.3}, 
                                                     "short": {"lookback":3, "qtl":0.3}
                                                     },
-                                            "TP2": {"long":{"lookback":6, "qtl": 0.66}, 
-                                                    "short": {"lookback":6, "qtl":0.66}
+                                            "TP2": {"long":{"lookback":6, "qtl": 0.6}, 
+                                                    "short": {"lookback":6, "qtl":0.6}
                                                     },
-                                            "TP3": {"long":{"lookback":9, "qtl": 0.99}, 
-                                                    "short": {"lookback":9, "qtl":0.99}
+                                            "TP3": {"long":{"lookback":9, "qtl": 0.9}, 
+                                                    "short": {"lookback":9, "qtl":0.9}
                                                     }
                                             }
                         ):
@@ -972,14 +972,14 @@ def calc_sig_strengths(df0,
 
     # print(df["S_positions"])
     # create a column to track the change in tide
-    df[f'short_change'] = df["S_positions"].diff().ne(0).cumsum()
+    df[f'short_change'] = df["S_positions"].diff().ne(0).cumsum() # would this be forward looking? ans: yes it is forward looking. qns: why? ans: 
     df[f'long_change'] = df["L_positions"].diff().ne(0).cumsum()
     # create a column to count the duration of each tide
     df[f'{signal}_short_dur'] = df.groupby(f'short_change').cumcount() +1
     df[f'{signal}_long_dur'] = df.groupby(f'long_change').cumcount() +1
     # calculate percentile for tide_dur
-    df[f'{signal}_short_dur'] = df[f'{signal}_short_dur'].shift(1)
-    df[f'{signal}_long_dur'] = df[f'{signal}_long_dur'].shift(1)
+    # df[f'{signal}_short_dur'] = df[f'{signal}_short_dur'].shift(1)
+    # df[f'{signal}_long_dur'] = df[f'{signal}_long_dur'].shift(1)
 
     # df.drop(columns=[f'short_change'], inplace=True)
     # df.drop(columns=[f'long_change'], inplace=True)
@@ -1019,6 +1019,7 @@ def calc_sig_strengths(df0,
             df[f"{signal}_{position}_{tp}_weakness"]=df[f"{signal}_{position}_{tp}_weakness"].fillna(method="ffill")
 
             df[f"{signal}_{position}_{tp}_strength_t"] = df[f"{signal}_{position}_strength_t"].dropna().rolling(lookback).quantile(qtl)#-1
+            # print(df[f"{signal}_{position}_{tp}_strength_t"])
             df[f"{signal}_{position}_{tp}_strength_t"]=df[f"{signal}_{position}_{tp}_strength_t"].fillna(method="ffill")
 
             df[f"{signal}_{position}_{tp}_weakness_t"] = df[f"{signal}_{position}_weakness_t"].dropna().rolling(lookback).quantile(1-qtl)#-1

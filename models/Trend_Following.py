@@ -204,49 +204,96 @@ def get_z_sig_TP(i,np_closePx, signals_dict, sig_lag=0, position="long",side="bu
     L_sell=kwargs.get("L_sell",1)
     S_buy=kwargs.get("S_buy",-1)
     S_sell=kwargs.get("S_sell",-1)
+
+    long_closeIdx = kwargs.get("long_closeIdx",None)
+    short_closeIdx = kwargs.get("short_closeIdx",None)
     # This kwargs.get does: if kwargs.get("L_buy",1) exists, then use that value, else use 1
     sig_lagged = i -sig_lag
     if sig_lagged >= i-1:
         sig_lagged = i
     
-    if position == "long":        
+    if position == "long":
+        profitable_RR = signals_dict[f"sig_long_RRRatio1"][i] < 1 # Risk > reward disproportionately. 
+            
         if side == "buy": 
+            time_since_trade_int = i - long_closeIdx
+        
             sig_change = signals_dict["sig"][sig_lagged] >=L_buy
+            profitable_RR = signals_dict[f"sig_long_RRRatio1"][i] >= 1 # Risk > reward disproportionately. 
             # macro_tide_change = (signals_dict["Y"][i] > 0 and signals_dict["Y"][i-1] < 0)
-            signal = sig_change# and macro_tide_change
+            signal = sig_change# and time_since_trade_int > profitable_RR*signals_dict["sig_short_SL3_t"][i]
+
         elif side == "sell":
+            entry_i = kwargs.get("entry_i",None)
+            time_in_trade_int = i - entry_i
+
+            TP1_hit = (np_closePx[i] > signals_dict["sig_long_TP1"][i-1]) and (np_closePx[i-1] < signals_dict["sig_long_TP1"][i-2])
+            SL1_hit = (np_closePx[i] < signals_dict["sig_long_SL1"][i-1]) and (np_closePx[i-1] > signals_dict["sig_long_SL1"][i-2]) 
+            TP1_t_hit = signals_dict["sig_long_TP1_t"][i] > time_in_trade_int
+            SL1_t_hit = signals_dict["sig_long_SL1_t"][i] > time_in_trade_int
+
+            TP2_hit = (np_closePx[i] > signals_dict["sig_long_TP2"][i-1]) and (np_closePx[i-1] < signals_dict["sig_long_TP2"][i-2])
+            SL2_hit = (np_closePx[i] < signals_dict["sig_long_SL2"][i-1]) and (np_closePx[i-1] > signals_dict["sig_long_SL2"][i-2]) 
+            TP2_t_hit = signals_dict["sig_long_TP2_t"][i] > time_in_trade_int
+            SL2_t_hit = signals_dict["sig_long_SL2_t"][i] > time_in_trade_int
+
+            TP3_hit = (np_closePx[i] > signals_dict["sig_long_TP3"][i-1]) and (np_closePx[i-1] < signals_dict["sig_long_TP3"][i-2])
+            SL3_hit = (np_closePx[i] < signals_dict["sig_long_SL3"][i-1]) and (np_closePx[i-1] > signals_dict["sig_long_SL3"][i-2]) 
+            TP3_t_hit = signals_dict["sig_long_TP3_t"][i] > time_in_trade_int
+            SL3_t_hit = signals_dict["sig_long_SL3_t"][i] > time_in_trade_int
+
+
             sig_change = signals_dict["sig"][sig_lagged] <L_sell
-            profitable_RR = signals_dict[f"sig_long_RRRatio1"][i] < 1 # Risk > reward disproportionately. 
 
-
-            # SL2_hit = (np_closePx[i] < signals_dict["sig_long_SL2"][i-1]) and (np_closePx[i-1] > signals_dict["sig_long_SL2"][i-2]) 
-            # TP2_hit = (np_closePx[i] > signals_dict["sig_long_TP2"][i-1]) and (np_closePx[i-1] < signals_dict["sig_long_TP2"][i-2])
-
-            # SL3_hit = (np_closePx[i] < signals_dict["sig_long_SL3"][i-1]) and (np_closePx[i-1] > signals_dict["sig_long_SL3"][i-2]) 
-            # TP3_hit = (np_closePx[i] > signals_dict["sig_long_TP3"][i-1]) and (np_closePx[i-1] < signals_dict["sig_long_TP3"][i-2])
-
-            signal = sig_change or profitable_RR
+            # SL1_exit = SL1_hit and signals_dict["sig_long_SL1_t"][i]
+            # signal = sig_change and profitable_RR
             # signal = sig_change or ((SL2_hit and profitable_RR) or (TP2_hit and not profitable_RR)) or ((SL3_hit and profitable_RR) or (TP3_hit and not profitable_RR))
-
+            TPs_hit = profitable_RR or (TP1_hit or TP2_hit or TP3_hit) 
+            TPs_t_hit = profitable_RR or (TP1_t_hit or TP2_t_hit or TP3_t_hit)
+            SLs_hit = not profitable_RR or (SL1_hit or SL2_hit or SL3_hit)
+            SLs_t_hit = not profitable_RR or (SL1_t_hit or SL2_t_hit or SL3_t_hit)
+            signal = TPs_hit or TPs_t_hit or SLs_hit or SLs_t_hit   
         
     elif position == "short":
+        profitable_RR = signals_dict[f"sig_short_RRRatio1"][i] >= 1 # Risk > reward disproportionately. 
+    
         if side == "buy": 
+            time_since_trade_int = i - short_closeIdx
+        
             sig_change = signals_dict["sig"][sig_lagged] <= S_buy
+            profitable_RR = signals_dict[f"sig_short_RRRatio1"][i] > 1 # Risk > reward disproportionately. 
             # macro_tide_change = (signals_dict["Y"][i] < 0 and signals_dict["Y"][i-1] > 0)
-            signal = sig_change #and macro_tide_change
+            signal = sig_change# and time_since_trade_int > profitable_RR*signals_dict["sig_long_SL3_t"][i]
 
         elif side == "sell":
+            entry_i = kwargs.get("entry_i",None)
+            time_in_trade_int = i - entry_i
+
+            TP1_hit = (np_closePx[i] < signals_dict["sig_short_TP1"][i-1]) and (np_closePx[i-1] > signals_dict["sig_short_TP1"][i-2])
+            SL1_hit = (np_closePx[i] > signals_dict["sig_short_SL1"][i-1]) and (np_closePx[i-1] < signals_dict["sig_short_SL1"][i-2]) 
+            TP1_t_hit = signals_dict["sig_short_TP1_t"][i] > time_in_trade_int
+            SL1_t_hit = signals_dict["sig_short_SL1_t"][i] > time_in_trade_int
+
+            TP2_hit = (np_closePx[i] < signals_dict["sig_short_TP2"][i-1]) and (np_closePx[i-1] > signals_dict["sig_short_TP2"][i-2])
+            SL2_hit = (np_closePx[i] > signals_dict["sig_short_SL2"][i-1]) and (np_closePx[i-1] < signals_dict["sig_short_SL2"][i-2]) 
+            TP2_t_hit = signals_dict["sig_short_TP2_t"][i] > time_in_trade_int
+            SL2_t_hit = signals_dict["sig_short_SL2_t"][i] > time_in_trade_int
+
+            TP3_hit = (np_closePx[i] < signals_dict["sig_short_TP3"][i-1]) and (np_closePx[i-1] > signals_dict["sig_short_TP3"][i-2])
+            SL3_hit = (np_closePx[i] > signals_dict["sig_short_SL3"][i-1]) and (np_closePx[i-1] < signals_dict["sig_short_SL3"][i-2]) 
+            TP3_t_hit = signals_dict["sig_short_TP3_t"][i] > time_in_trade_int
+            SL3_t_hit = signals_dict["sig_short_SL3_t"][i] > time_in_trade_int
+
             sig_change = signals_dict["sig"][sig_lagged] > S_sell
-            profitable_RR = signals_dict[f"sig_short_RRRatio1"][i] < 1 # Risk > reward disproportionately. 
-
-            # SL2_hit = (np_closePx[i] > signals_dict["sig_short_SL2"][i-1]) and (np_closePx[i-1] < signals_dict["sig_short_SL2"][i-2]) 
-            # TP2_hit = (np_closePx[i] < signals_dict["sig_short_TP2"][i-1]) and (np_closePx[i-1] > signals_dict["sig_short_TP2"][i-2])
-
-            # SL3_hit = (np_closePx[i] > signals_dict["sig_short_SL3"][i-1]) and (np_closePx[i-1] < signals_dict["sig_short_SL3"][i-2]) 
-            # TP3_hit = (np_closePx[i] < signals_dict["sig_short_TP3"][i-1]) and (np_closePx[i-1] > signals_dict["sig_short_TP3"][i-2])
             
-            signal = sig_change or profitable_RR
+            # SL1_exit = SL1_hit and signals_dict["sig_long_SL1_t"][i]
+            # signal = sig_change and profitable_RR 
             # signal = sig_change or ((SL2_hit) or (TP2_hit and profitable_RR)) or ((SL3_hit) or (TP3_hit and profitable_RR))
+            TPs_hit = profitable_RR or (TP1_hit or TP2_hit or TP3_hit) 
+            TPs_t_hit = profitable_RR or (TP1_t_hit or TP2_t_hit or TP3_t_hit)
+            SLs_hit = not profitable_RR or (SL1_hit or SL2_hit or SL3_hit)
+            SLs_t_hit = not profitable_RR or (SL1_t_hit or SL2_t_hit or SL3_t_hit)
+            signal = TPs_hit or TPs_t_hit or SLs_hit or SLs_t_hit   
 
     return signal
 

@@ -2,6 +2,6 @@ pandas
 numpy
 numba
 matplotlib
-plotly 
+plotly
 tqdm
 ccxt

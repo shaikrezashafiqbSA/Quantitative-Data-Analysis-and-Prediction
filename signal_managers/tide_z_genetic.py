@@ -179,8 +179,8 @@ def objective_function(df=None,
         signal_function="z_sig"
 
 
-        title = f"{timeframe_to_trade} {instrument_to_trade} Tide Z spot | fees: {fee*1e4} bps"
-        file_name = f"{timeframe_to_trade} {instrument_to_trade} Tide Z"
+        title = f"{timeframe_to_trade} {instrument_to_trade} Z | fees: {fee*1e4} bps"
+        file_name = f"{timeframe_to_trade} {instrument_to_trade} Z"
 
         df_sig = df.copy()
         # df_sig["sig"] = df_sig[signals_to_trade]#.shift(-1).fillna(method="ffill")
@@ -223,18 +223,20 @@ def objective_function(df=None,
                                                         **kwargs)
 
 
-        print(f"\n{'-'*20}\n---> (2) TP based strategy \n{'-'*20}\n")
+        print(f"\n{'='*30}\n(2) TP based z-signal\n{'='*30}\n")
+        title = f"{timeframe_to_trade} {instrument_to_trade} Z TP | fees: {fee*1e4} bps"
+        file_name = f"{timeframe_to_trade} {instrument_to_trade} Z TP"
         dfmtzTP = indicators.calc_sig_strengths(df_backtested, 
                         signal = "sig",
                         penalty = 1, # this widens the SL so that it is not hit too often
-                        tp_position_dict = {"TP1": {"long":{"lookback":5, "qtl": 0.1}, 
-                                                    "short": {"lookback":3, "qtl":0.3}
+                        tp_position_dict = {"TP1": {"long":{"lookback":3, "qtl": 0.8}, 
+                                                    "short": {"lookback":3, "qtl":0.6}
                                                     },
-                                            "TP2": {"long":{"lookback":5, "qtl": 0.1}, 
-                                                    "short": {"lookback":6, "qtl":0.6}
+                                            "TP2": {"long":{"lookback":6, "qtl": 0.8}, 
+                                                    "short": {"lookback":6, "qtl":0.8}
                                                    },
-                                            "TP3": {"long":{"lookback":9, "qtl": 0.9}, 
-                                                    "short": {"lookback":9, "qtl":0.9}
+                                            "TP3": {"long":{"lookback":9, "qtl": 0.95}, 
+                                                    "short": {"lookback":9, "qtl":0.95}
                                                    }
                                            }
                         )
@@ -295,7 +297,7 @@ def objective_function(df=None,
     # 3. mutate the SL by adding a new window
 
         if mutate_signals_w_TP:
-                print(f"\n{'='*30}\n(2) MUTATING SIGNALS USING TP\n{'='*30}\n")
+                print(f"\n{'='*30}\n(3) MUTATING SIGNALS USING TP and run strat again\n{'='*30}\n")
 
                 # 1st round of mutated backtest
                 dfmtzTP = indicators.calc_sig_strengths(df_backtested, 
@@ -312,7 +314,7 @@ def objective_function(df=None,
                                                         }
                                                 }
                                 )
-                dfmtzTP = mutate_signals(dfmtzTP,signals_to_trade)
+                dfmtzTP = mutate_signals(dfmtzTP,sig_to_mutate="sig")
 
 
                 signal_function="z_sig_TP"
@@ -321,8 +323,10 @@ def objective_function(df=None,
                 # print(df_sig["sig"].hist())
                 # df_sig["sig"] = df_sig[signals_to_trade]#.shift(-1).fillna(method="ffill")
                 df_trade = dfmtzTP[backtest_window[0]:backtest_window[1]].copy()
-                df_trade["sig"] = df_trade[signals_to_trade]#.shift(-1).fillna(method="ffill")
-                signals_to_trade= ["sig"]
+                # df_trade["sig"] = df_trade[signals_to_trade]#.shift(-1).fillna(method="ffill")
+                signals_to_trade= list(df_trade.columns)
+                title = f"{timeframe_to_trade} {instrument_to_trade} Z TP mutant| fees: {fee*1e4} bps"
+                file_name = f"{timeframe_to_trade} {instrument_to_trade} Z TP mutant"
                 df_backtested,df_trades,df_summary = backtest.backtest(model_name= model_name,
                                                                 df0=df_trade,
                                                                 timeframe=timeframe_to_trade,
@@ -356,30 +360,32 @@ def objective_function(df=None,
                                                                 )
                 
                 # START OUTPUT PRINTS =============================================================================================
-                if debug_verbose:
+                if False:
+                        df = df_backtested.copy()
                         cols_to_seek = ["L_id","sig","L_positions","L_entry_price","L_exit_price", "S_positions","S_entry_price","S_exit_price"]
-                        L_id_to_seek = df["L_id"].dropna().iloc[-1]
-                        print(f"{'===='*20}\nAFTER SIGNAL MUTATION\n{'===='*20}\n-->\n{L_id_to_seek}")
-                        df_to_print = df[df["L_id"] in L_id_to_seek][cols_to_seek]
+                        L_id_to_seek = df["L_id"].iloc[20:40].min() #df["L_id"].dropna().iloc[-1]
+                        print(f"{'===='*20}\nAFTER Mutated backtest\n{'===='*20}\n-->\n{L_id_to_seek}")
+                        df_to_print = df[df["L_id"] == L_id_to_seek][cols_to_seek]
                         print(df_to_print.head(3))
                         print(df_to_print.tail(3))
+                        df_to_print = df_backtested[df_backtested["L_id"]==L_id_to_seek][cols_to_seek]
+                        print(df_to_print.head(2))
+                        print(df_to_print.tail(2))
                 # END PRINTS ======================================================================================================
-                df_to_print = df_backtested[df_backtested["L_id"]==L_id_to_seek][cols_to_seek]
-                print(df_to_print.head(2))
-                print(df_to_print.tail(2))
+
                 
                 return df_backtested, df_trades, df_summary
 
         else:
                 return df_backtested, df_trades, df_summary
 
-def mutate_signals(df,sigs, debug_verbose = True):
-    sig = sigs[0]
-    print(f"sig from sigs -----> {sig} from {sigs}")
+def mutate_signals(df,sig_to_mutate, debug_verbose = True):
+    sig = sig_to_mutate
+
     # START OUTPUT PRINTS ============================================================================================
-    if debug_verbose:
+    if False:
         cols_to_seek = ["L_id","sig","L_positions","L_entry_price","L_exit_price", "S_positions","S_entry_price","S_exit_price"]
-        L_id_to_seek = df["L_id"].dropna().iloc[-1]  
+        L_id_to_seek = df["L_id"].iloc[20:40].min() #df["L_id"].dropna().iloc[-1]  
         print(f"{'===='*20}\nBEFORE SIGNAL MUTATION\n{'===='*20}\n-->\n{df['L_id'].dropna().iloc[-1]}")
         df_to_print = df[df["L_id"]==L_id_to_seek][cols_to_seek]
         print(df_to_print.head(3))
@@ -394,16 +400,16 @@ def mutate_signals(df,sigs, debug_verbose = True):
     # print(df[sig].values>0)
     # L_sig_concur = all(df[sig].values >0)
     # S_sig_concur = all(df[sig].values >0)
-    L_sig_concur = np.where(df[sig]>0,True,False)
-    S_sig_concur = np.where(df[sig]<0,True,False)
-    print(f"L_TP_signal_concur: {L_TP_signal_concur[20:40]} ||| L_sig_concur: {L_sig_concur[20:40]}")
+    L_sig_concur = np.where(df[sig]>2,True,False)
+    S_sig_concur = np.where(df[sig]<-2,True,False)
+    # print(f"L_TP_signal_concur: {L_TP_signal_concur[20:40]} ||| L_sig_concur: {L_sig_concur[20:40]}")
 #     print(f"L_TP_signal_concur: {np.shape(L_TP_signal_concur)} ||| L_sig_concur: {np.shape(L_sig_concur)} || len(df): {len(df)}")
 #     print(f"df: {np.shape(df)}")
-    
-    df[sig] = np.where(S_TP_signal_concur & S_sig_concur,-2,0) + np.where(L_TP_signal_concur & L_sig_concur,30,0)
+    # print(f"!!!!!!!!!!!!!!!!!!!!!! why is open 30? ---> {sig}")
+    df[sig] = np.where(S_TP_signal_concur & S_sig_concur,-2,0) + np.where(L_TP_signal_concur | L_sig_concur,2,0)
 #     df[sig[0]] = np.where(L_TP_signal_concur & L_sig_concur,2,-2)
     # START OUTPUT PRINTS =============================================================================================
-    if True:
+    if False:
         L_id_to_seek = df["L_id"].iloc[20:40].min()
         print(f"{'===='*20}\nAFTER SIGNAL MUTATION\n{'===='*20}\n-->\n{L_id_to_seek}")
         df_to_print = df[df["L_id"]==L_id_to_seek][cols_to_seek]

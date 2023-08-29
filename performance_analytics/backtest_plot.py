@@ -685,5 +685,5 @@ def backtest_plots_ppt(df,
     # plt.savefig(f"./backtests/{timeframe}BTCSPX_model.png", dpi=300, bbox_inches="tight")
     # fig.suptitle(f"{title}\n {df.index[0].date()} to {df.index[-1].date()}", fontsize="40")
     # fig.tight_layout(pad=0., w_pad=0.0, h_pad=0.1)
-    if file_name is not None:
-        fig.savefig(f"./backtests/{file_name}.pdf", bbox_inches='tight')
+    # if file_name is not None:
+    #     fig.savefig(f"./backtests/{file_name}.pdf", bbox_inches='tight')
