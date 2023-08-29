@@ -70,7 +70,9 @@ def backtest_summary(df0,long_starting_equity,short_starting_equity, N=255*24*12
     # Consider numbarising this, it is possible
     # TODO: numbarise this
     t0=time.time()
+    
     if rolling_sr_window is not None:
+        print(f"rolling_sr_window is not None: {rolling_sr_window is not None}")
         try:
             df["A_rolling_SR"] = rolling_sr.calc_rolling_sr(df["cum_A_pnl%"].pct_change().values, window=rolling_sr_window)*np.sqrt(N)
             df["L_rolling_SR"] = rolling_sr.calc_rolling_sr(df["cum_L_pnl%"].pct_change().values, window=rolling_sr_window)*np.sqrt(N)

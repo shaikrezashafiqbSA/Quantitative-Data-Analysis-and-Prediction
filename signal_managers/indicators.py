@@ -1,7 +1,12 @@
 import numpy as np
 import pandas as pd
 import numba as nb
-# from strategy.resampler import calc_ohlc_from_series
+from tqdm import tqdm
+
+from utils.find_index import find_list_index
+from utils.list_type_converter import convert_to_type,convert_to_array
+
+
 @nb.njit(cache=True)
 def _calc_kdr(high_px, low_px):
     
@@ -21,6 +26,7 @@ def _calc_kdr(high_px, low_px):
         else:
             kdr[i] = 0
     return kdr
+
 
 def key_day_reversal(high_prices, low_prices):
     """
@@ -45,6 +51,7 @@ def key_day_reversal(high_prices, low_prices):
     else:
         return 0
 
+
 def calc_kdr(df):
     """
     This function takes in two lists of high and low prices and returns a time series of key day reversal data.
@@ -65,9 +72,7 @@ def calc_kdr(df):
     
     return df
 
-
     
-
 
 @nb.njit(cache=True)
 def nb_ewma(close_px: np.array, window: int, alpha=None) -> np.array:
@@ -102,6 +107,7 @@ def nb_ewma(close_px: np.array, window: int, alpha=None) -> np.array:
         ewma[i] = ewma_old / w
     return ewma
 
+
 @nb.njit(cache=True)
 def nb_wma(close_px: np.array, window: int) -> np.array:
     """ Weighted moving average
@@ -117,14 +123,13 @@ def nb_wma(close_px: np.array, window: int) -> np.array:
     wma = np.full(n, np.nan)
     weights = np.arange(window ) +1   # linear increasing weights [1,2,3,...,13,14]
     weights_sum = np.sum(weights)
-
     for idx in range(window, n):
         # explicitly declare the window. No other reference to closePrices_np
         price_window = close_px[idx - window + 1:idx + 1]  # up to but not including
 
         wma[idx] = np.sum(weights * price_window) / weights_sum
-
     return wma
+
 
 @nb.njit(cache=True)
 def nb_hma(close_px: np.array, window: int) -> np.array:
@@ -146,8 +151,8 @@ def nb_hma(close_px: np.array, window: int) -> np.array:
     # vector operation
     hma_input = ( 2 *wma_half) - wma_full
     hma = nb_wma(hma_input, window=int(np.sqrt(window)))
-
     return hma
+
 
 def calc_emas(df,price="close", window=89, label=14):    
     # Ensure no nans
@@ -160,6 +165,7 @@ def calc_emas(df,price="close", window=89, label=14):
     df[f"EMA_{label}"]= ema
     
     return df
+
 
 @nb.njit(cache=True)
 def nb_rsi(close_px: np.array, window: int) -> np.array:
@@ -190,6 +196,7 @@ def nb_rsi(close_px: np.array, window: int) -> np.array:
 
     return rsi
 
+
 def calc_rsis(df,price="close", window=13, label=13):    
     # Ensure no nans
     df.dropna(inplace=True)
@@ -202,8 +209,20 @@ def calc_rsis(df,price="close", window=13, label=13):
     
     return df
 
-@nb.njit(cache=True)
-def nb_mfi(high: np.array, low: np.array, close: np.array, volume: np.array, window: int) -> np.array:
+
+
+# ============================================================================================================================================
+# ============================================================================================================================================
+#                               MFI
+# ============================================================================================================================================
+# ============================================================================================================================================
+
+# @nb.njit(cache=True)
+def rolling_mfi(np_col: np.array,
+                 param_func_mfi,
+                 fixed_window:bool=False,
+                 fill_value = np.nan,
+                 col_index=None) -> np.array:
     """
     nb_mfi is ~2x speed of pta.mfi. Not that much speed-up. Same values output as pta.mfi
 
@@ -217,58 +236,179 @@ def nb_mfi(high: np.array, low: np.array, close: np.array, volume: np.array, win
     RETURNS:
             mfi: np.array(float)
     """
-    n = len(close)
-    typicalPrice = (high+low+close) / 3
-    raw_money_flow = volume * typicalPrice
+    n = len(np_col)
+    windows = param_func_mfi(np_col, 0, col_index)
+    max_lookback = np.max(windows) # this could be list
+    MFI_i_np = np.full((len(windows)), np.nan)
+    MFI_list = [MFI_i_np]*max_lookback
+    for i in range(max_lookback, n+1):
+        # print(f"i: {i}")
+        windows = param_func_mfi(np_col, i,col_index)
+        MFI_i_np = np.full((len(windows)), np.nan)
+        psum = np.full((len(windows)), np.nan)
+        nsum = np.full((len(windows)), np.nan)
+        psum_clean = np.full((len(windows)), np.nan)
+        nsum_clean = np.full((len(windows)), np.nan)
+        for w, window in enumerate(windows):
+            max_lookback = window # this could be list
+            if fixed_window:
+                high_i = np_col[i-max_lookback:i+1,2] # y2 = x[-max_lookback:,2]
+                low_i = np_col[i-max_lookback:i+1,3] 
+                close_i = np_col[i-max_lookback:i+1,4]
+                volume_i = np_col[i-max_lookback:i+1,-1]
+                # print(f"i: {i}, maxlookback: {max_lookback} --> high_i: {high_i}")
+            else:
+                # expanding window
+                # print(np_col)
+                high_i = np_col[:i+1,2]
+                low_i = np_col[:i+1,3]
+                close_i = np_col[:i+1,4]
+                volume_i = np_col[:i+1,-1]
+            # print(f"volume_i = np_col[-max_lookback:i+1,-1] : {volume_i} = {len(np_col[-max_lookback:i+1,-1])}")
+            typicalPrice = (high_i+low_i+close_i) / 3
+            # print(f"typicalPrice = (high_i+low_i+close_i) / 3: {typicalPrice} = ({high_i}+{low_i}+{close_i}) / 3")
+            rawMoneyFlow = typicalPrice * volume_i 
+            typicalPrice_diff = np.append(np.nan,np.diff(typicalPrice))
+            # print(f"rawMoney shape: {np.shape(rawMoneyFlow)}")
 
-    # create an index of Bool type
-    pos_mf_idx = np.full(n, False)
-    pos_mf_idx[1:] = np.diff(typicalPrice) > 0
+            # print(f"rawMoneyFlow = typicalPrice * volume_i: {rawMoneyFlow} = {typicalPrice} * {volume_i}")
+            psum[w] = 0
+            nsum[w] = 0
+            for j in range(int(window)):
+                # print(f"i: {i} ----> ln 262: i-j-1: {i-j-1}")
+                typicalPrice_diff_j = typicalPrice_diff[j-1]
+                if typicalPrice_diff_j <= 0 and not np.isnan(typicalPrice_diff_j):
+                    nsum[w] -= typicalPrice_diff_j#rawMoneyFlow[j-1]
+                elif typicalPrice_diff_j > 0 and not np.isnan(typicalPrice_diff_j):
+                    psum[w] += typicalPrice_diff_j #rawMoneyFlow[j-1]
+                else:
+                    psum[w] += 0  #rawMoneyFlow[j-1]
+                    nsum[w] -= 0 #rawMoneyFlow[j-1]
+                # print(typicalPrice_diff_j)
+            # mfi = 100 * psum[w]/(psum[w]+nsum[w]) # this one yield invalid value error 
 
-    # assign values of raw_money_flow to pos_mf where pos_mf_idx == True...Likewise for neg_mf
-    pos_mf = np.full(n, np.nan)
-    neg_mf = np.full(n, np.nan)
-    pos_mf[pos_mf_idx] = raw_money_flow[pos_mf_idx]
-    neg_mf[~pos_mf_idx] = raw_money_flow[~pos_mf_idx]
+            # Create masks for NaN, Inf, and -Inf values
+            nan_mask = np.isnan(psum[w]) | np.isnan(nsum[w])
+            inf_mask = np.isinf(psum[w]) | np.isinf(nsum[w])
 
-    psum = np.full(n, np.nan)
-    nsum = np.full(n, np.nan)
+            # Replace NaN, Inf, and -Inf values with np.nan
+            psum_clean[w] = np.where(nan_mask | inf_mask, np.nan, psum[w])
+            nsum_clean[w] = np.where(nan_mask | inf_mask, np.nan, nsum[w])
+            # print(f"i: {i} --- w: {w}\n--> psum_clean: {psum_clean[w]}\n--> nsum_clean: {nsum_clean[w]}") # error is because psum_clean == nsum_clean 
 
-    for i in range(window, n):
-        psum[i] = np.nansum(pos_mf[i-window+1:i+1])
-        nsum[i] = np.nansum(neg_mf[i-window+1:i+1])
+            denominator = psum_clean + nsum_clean
+            if denominator == 0:
+                mfi = np.nan
+            numerator = 100 * psum_clean[w]
+            # print(f"i: {i} --- w: {w}\n--> numerator: {numerator}\n--> denominator: {denominator}")
+            # mfi = np.where(np.abs(denominator) > tolerance, numerator / denominator, np.where(np.abs(denominator) < tolerance, np.inf, -np.inf))
+            mfi = np.where(denominator != 0, numerator/denominator, fill_value)
 
-    mfi = 100 * psum / (psum + nsum)
-
-    return mfi
-
-def calc_mfi(df, window, label=14):#, ohlc=None):
-    high = df["high"].to_numpy()
-    low = df["low"].to_numpy()
-    close = df["close"].to_numpy()
-    volume = df["volume"].to_numpy()
     
-    mfi = nb_mfi(high,low, close, volume, window)
-    df[f"MFI_{label}"]= mfi
-    
-    # if ohlc is not None:
-    #     df[[f"MFI_{label}_open",f"MFI_{label}_high",f"MFI_{label}_low",f"MFI_{label}_close"]] = calc_ohlc_from_series(df,col_name=f"MFI_{label}", window=ohlc)
+            MFI_i_np[w] = mfi
+        MFI_list.append(MFI_i_np)
 
+    return MFI_list
+
+
+def param_func_mfi_EMAVol(x, i, col_index = None):
+    q_Lb, q_Ls, q_Sb, q_Ss = 0.8, 0.2, 0.2, 0.8
+    # Calculate the volatility of the input data
+    try:
+        ret_vol = x[:i+1,col_index[0]]
+        vol_sharpe = np.mean(ret_vol)/np.std(ret_vol) # This should be a EMA vol calculated outside\
+        ema_sharpe_spam = vol_sharpe.ewm(span=81)
+        ema_sharpe = ema_sharpe_spam.mean()
+        q_Lb = ema_sharpe_spam.quantile(q=q_Lb)
+        q_Ls = ema_sharpe_spam.quantile(q=q_Ls)
+        q_Sb = ema_sharpe_spam.quantile(q=q_Sb)
+        q_Ss = ema_sharpe_spam.quantile(q=q_Ss)
+        # print(f"EMA sharpe: {ema_sharpe}")
+    except Exception as e:
+        ema_sharpe = 0
+    # print(f"volatility in dynamic_params_func {i}: {volatility}") # This is too smooth to be vol triggers have to change for future use
+    # Set the window lengths and threshold values based on the volatility
+    if 0.67 <= ema_sharpe:
+        windows = [14]
+    elif ema_sharpe < 0.67:
+        windows = [28]
+    else:
+        windows = [55]
+    
+    return convert_to_array(windows)
+
+def param_func_mfi(x, i, col_index = None):
+    """
+    Template for dynamic parameters function
+    where x is a np_array of cols + dynamic_param_col
+    """
+    windows = [14]
+
+    return convert_to_array(windows)
+    
+
+def calc_mfi_sig(df0, 
+                 cols_set = [['high','low', 'close', 'volume'], ['high','low', 'open', 'volume']],
+                 param_func_mfi = param_func_mfi,
+                 dynamic_param_col = None,
+                 dynamic_param_combine = True,
+                 fixed_window = False,
+                 col_index = None):  # fixed_window can also be dynamicised away by VARYING expanding window based on volatility
+   
+    df = df0.copy() # if somehow need to save initial state of df before adding signals
+    df["date_time"] = df.index
+    for cols in tqdm(cols_set):
+        if dynamic_param_col is not None:
+            col_names = ['date_time']+cols+dynamic_param_col
+            col_index = find_list_index(col_names, dynamic_param_col)
+            np_col = df[col_names].values
+        else:
+            col_names = ['date_time']+cols
+            np_col = df[col_names].values
+        # print(f"len np_col: {len(np_col)}")
+        mfi = rolling_mfi(np_col,
+                          param_func_mfi = param_func_mfi,
+                          fixed_window = fixed_window,
+                          col_index=col_index)
+        # print(f"shape tide: {np.shape(tide)}, shape ebb: {np.shape(ebb)}, shape flow: {np.shape(flow)}")
+        df1 = df.copy()
+        # print(f"len df1: {len(df1)}")
+        # if window_threshold_func() 
+        
+        for t,i in zip(df1.index, range(len(df1))):
+            # print(f"t: {t}, i: {i}")
+            windows = param_func_mfi(np_col, i, col_index)
+            # print(f"i-{i}: post processing\n--> tide shape: {np.shape(mfi[i])} --> {mfi[i]}\n--> windows: {windows}")
+            for w, window in enumerate(windows):
+                # print(w)
+                if dynamic_param_combine:
+                    try:
+                        df1.at[t, f"MFI"] = mfi[i][w]
+                    except Exception:
+                        print(f"shape mfi[i][w]: np.shape(mfi[{i}][{w}]) --> mfi: {mfi}")
+                        df1.at[t, f"MFI"] = -1000 # to find out where in df is error coming from
+                else:
+                    df1.at[t, f"MFI{window}"] = mfi[i][w]
+
+        df = df1.copy()
     return df
 
 
-# ======================================================================
+# ============================================================================================================================================
+# ============================================================================================================================================
 #                               Tides
-# ======================================================================
-    
-@nb.njit(cache=True)
+# ============================================================================================================================================
+# ============================================================================================================================================
+
+
+# @nb.njit(cache=True)
 def rolling_sum(heights, w=4):
     ret = np.cumsum(heights)
     ret[w:] = ret[w:] - ret[:-w]
     return ret[w - 1:]
 
 
-@nb.njit(cache=True)
+# @nb.njit(cache=True)
 def calc_exponential_height(heights, w):  ## CHECK!!
     # heights = OHLCVT_array[:,1]-OHLCVT_array[:,2]
     rolling_sum_H_L = rolling_sum(heights, w)
@@ -281,7 +421,7 @@ def calc_exponential_height(heights, w):  ## CHECK!!
     return exp_height  # (mpbw.iloc[-1]-heights[-w]+heights[-1])/w
 
 
-@nb.njit(cache=True)
+# @nb.njit(cache=True)
 def calc_tide(open_i: np.array,
               high_i: np.array,
               low_i: np.array,
@@ -296,7 +436,7 @@ def calc_tide(open_i: np.array,
     new_open = open_i[-1]
     new_high = high_i[-1]
     new_low = low_i[-1]
-
+    # print(f"new_open: {new_open}, new_high: {new_high}, new_low: {new_low}")    
     if np.isnan(previous_tide):
         previous_tide = 1
     if np.isnan(previous_ebb):
@@ -337,15 +477,17 @@ def calc_tide(open_i: np.array,
     w_0 = 0
     for w in windows:
         w_i = calc_exponential_height(heights, w)
+        # print(f"w_0: {w_0}, w_i: {w_i}, w: {w}: heights: {heights}")
         if w_i > w_0:
             max_exp_height = w_i
             w_0 = w_i
+        # print(max_exp_height)
     # max_exp_height=max([calc_exponential_height(heights,w) for w in windows])#calc_exponential_height(prices,lengths[0]),calc_exponential_height(prices,lengths[1]),calc_exponential_height(prices,lengths[2]))    #THIS CAN BE CHANGED TO separate rolling functions#
 
     # sensitivity=sensitivity/100
     max_exp_height_ranges = list(np.quantile(heights, np.linspace(0, 1, thresholds)))
     max_exp_height_ranges = [0] + max_exp_height_ranges + [np.inf]
-    additives_range = np.linspace(0, np.quantile(heights, sensitivity / 100), len(max_exp_height_ranges) + 1)
+    additives_range = np.linspace(0, np.quantile(heights, sensitivity), len(max_exp_height_ranges) + 1)
     max_exp_height_ranges = list(zip(max_exp_height_ranges[0:-1], max_exp_height_ranges[1:]))
 
     i = 0
@@ -442,24 +584,18 @@ def calc_tide(open_i: np.array,
 
 
 # @nb.njit(cache=True)
-def nb_tide(np_col,
+def rolling_tide(np_col,
             fixed_window: bool,
-            tide_window_threshold_func):
+            param_func_tide,
+            col_index=None):
 
     n = len(np_col)
-    open_ = np_col[:, 0]
-    high = np_col[:, 1]
-    low = np_col[:, 2]
-
     
     previous_tide = np.nan
     previous_ebb = np.nan
     previous_flow = np.nan
-
-
-
-    
-    windows_sets, thresholds, sensitivities=tide_window_threshold_func(np_col,0)
+    # print(f"col_index = {col_index}, np_col: {np_col}")
+    windows_sets, thresholds, sensitivities=param_func_tide(np_col,0, col_index)
     tide_i_np = np.full((len(windows_sets), len(thresholds)), np.nan)
     ebb_i_np = np.full((len(windows_sets), len(thresholds)), np.nan)
     flow_i_np = np.full((len(windows_sets), len(thresholds)), np.nan)
@@ -469,133 +605,131 @@ def nb_tide(np_col,
     ebb_list = [ebb_i_np]*max_lookback
     flow_list = [flow_i_np]*max_lookback
     for i in range(max_lookback, n + 1):
-        windows_sets, thresholds, sensitivities = tide_window_threshold_func(np_col,i)
+        windows_sets, thresholds, sensitivities = param_func_tide(np_col,i, col_index)
         tide_i_np = np.full((len(windows_sets), len(thresholds)), np.nan)
         ebb_i_np = np.full((len(windows_sets), len(thresholds)), np.nan)
         flow_i_np = np.full((len(windows_sets), len(thresholds)), np.nan)
-        # previous_tide_np = np.full((len(windows_sets), len(thresholds), len(sensitivities)), np.nan)
-        # previous_ebb_np = np.full((len(windows_sets), len(thresholds), len(sensitivities)), np.nan)
-        # previous_flow_np = np.full((len(windows_sets), len(thresholds), len(sensitivities)), np.nan)
-        for k,windows in enumerate(windows_sets):
-            for j,threshold in enumerate(thresholds):
+        # print(f"shape tide: {np.shape(tide_i_np)}, shape ebb: {np.shape(ebb_i_np)}, shape flow: {np.shape(flow_i_np)}")
+        for w,windows in enumerate(windows_sets):
+            for th,threshold in enumerate(thresholds):
                 if fixed_window:
-                    open_i = open_[i - max_lookback:i]
-                    high_i = high[i - max_lookback:i]
-                    low_i = low[i - max_lookback:i]
+                    open_i = np_col[i+1-max_lookback:i+1,1]
+                    high_i = np_col[i+1-max_lookback:i+1,2] # y2 = x[-max_lookback:,2]
+                    low_i = np_col[i+1-max_lookback:i+1,3]
                 else:
                     # expanding window
-                    open_i = open_[:i]
-                    high_i = high[:i]
-                    low_i = low[:i]
+                    open_i = np_col[:i+1,1]
+                    high_i = np_col[:i+1,2] 
+                    low_i = np_col[:i+1,3]
 
-                try:
-                    previous_tide=tide_list[i-1][j,k]
-                    previous_ebb=ebb_list[i-1][j,k]
-                    previous_flow=flow_list[i-1][j,k]
-                except Exception as e:
-                    previous_tide = np.nan
-                    previous_ebb = np.nan
-                    previous_flow = np.nan
-                    # print(f"t={t}, all still nan...")
+                # try:
+                previous_tide=tide_list[i-1][th,w]
+                previous_ebb=ebb_list[i-1][th,w]
+                previous_flow=flow_list[i-1][th,w]
+                # except
+                # previous_tide = np.nan
+                # previous_ebb = np.nan
+                # previous_flow = np.nan
+                # print(f"t={t}, all still nan...")
                 windows = np.array(windows)
                 threshold = int(threshold)
                 sensitivity = float(sensitivities[0])
-                # print(f"{t} ---> windows={windows}, threshold={threshold}, sensitivity={sensitivities[0]}")
-                tide_i, ebb_i, flow_i = calc_tide(open_i=open_i,
-                                                high_i=high_i,
-                                                low_i=low_i,
-                                                previous_tide=previous_tide,
-                                                previous_ebb=previous_ebb,
-                                                previous_flow=previous_flow,
-                                                windows=windows,
-                                                thresholds=threshold,
-                                                sensitivity=sensitivity) # to be generalised next
-    
+                try:
+                    # print(f"\ni: {i}, np_col = {np_col[:,1]}\n")
+                    tide_i, ebb_i, flow_i = calc_tide(open_i=open_i,
+                                                    high_i=high_i,
+                                                    low_i=low_i,
+                                                    previous_tide=previous_tide,
+                                                    previous_ebb=previous_ebb,
+                                                    previous_flow=previous_flow,
+                                                    windows=windows,
+                                                    thresholds=threshold,
+                                                    sensitivity=sensitivity) # to be generalised next
+                except Exception as e:
+                    raise Exception(f"i: {i}, np_col = {np_col[:,1]}\nerror: {e}\n\n")
+                    # tide_i, ebb_i, flow_i = np.nan, np.nan, np.nan
+                # print(f"t:{t} w:{w} th:{th} ---> windows={windows}, threshold={threshold}, sensitivity={sensitivities[0]}")
                 
-                tide_i_np[j, k] = tide_i
-                ebb_i_np[j, k] = ebb_i
-                flow_i_np[j, k] = flow_i
+                tide_i_np[th, w] = tide_i
+                ebb_i_np[th, w] = ebb_i
+                flow_i_np[th, w] = flow_i
+
+                # print(f"shape tide: {np.shape(tide_i_np)}, shape ebb: {np.shape(ebb_i_np)}, shape flow: {np.shape(flow_i_np)}")
         tide_list.append(tide_i_np)
+        # print(f"tide_i_np: {tide_i_np}")
         ebb_list.append(ebb_i_np)
         flow_list.append(flow_i_np)
         
     return tide_list,ebb_list,flow_list
 
 
-# ======================================================================
-#                               tide V2
-# ======================================================================
-def tide_window_threshold_func_adv(x, i):
-    """
-    Define a more complex function to calculate the window lengths, thresholds, and sensitivity parameters
-    based on characteristics of the input data.
-
-    Args:
-        x: x is a np_array of cols + dynamic_param_col
-        i: The index of the current data point.
-
-    Returns:
-        The list of window lengths to use.
-        The list of thresholds to use for each window length.
-        The sensitivity parameter.
-    """
-
-    # Calculate the standard deviation of the price data.
-    std = np.std(x)
-
-    # Calculate the minimum window length.
-    min_window_length = int(std * 10)
-
-    # Calculate the maximum window length.
-    max_window_length = int(std * 100)
-
-    # Calculate the number of thresholds to use.
-    num_thresholds = 3
-
-    # Generate a list of possible window lengths.
-    window_lengths = np.linspace(min_window_length, max_window_length, num=10)
-
-    # Generate a list of possible thresholds.
-    thresholds = np.linspace(0, 1, num=num_thresholds)
-
-    # Calculate the sensitivity parameter.
-    sensitivity = 2
-
-    return window_lengths, thresholds, sensitivity
+# ============================================================================================================================================
+# ============================================================================================================================================
+#                               Tides V2
+# ============================================================================================================================================
+# ============================================================================================================================================
 
 
-def tide_window_threshold_func(x, i):
+def param_func_tide_EMAVol(x, i, col_index=None):
+
+    q_Lb, q_Ls, q_Sb, q_Ss = 0.9, 0.1, 0.1, 0.9
+
+    
+    # Calculate the volatility of the input data
+    try:
+        ret_vol = x[:i+1,col_index[0]]
+        vol_sharpe = np.mean(ret_vol)/np.std(ret_vol) # This should be a EMA vol calculated outside\
+        ema_sharpe_spam = vol_sharpe.ewm(span=81)
+        ema_sharpe = ema_sharpe_spam.mean()
+        q_Lb = ema_sharpe_spam.quantile(q=q_Lb)
+        q_Ls = ema_sharpe_spam.quantile(q=q_Ls)
+        q_Sb = ema_sharpe_spam.quantile(q=q_Sb)
+        q_Ss = ema_sharpe_spam.quantile(q=q_Ss)
+        # print(f"EMA sharpe: {ema_sharpe}")
+    except Exception as e:
+        ema_sharpe = 0
+    # print(f"volatility in dynamic_params_func {i}: {volatility}") # This is too smooth to be vol triggers have to change for future use
+    # Set the window lengths and threshold values based on the volatility
+    if 0.67 <= ema_sharpe:
+        windows = [[8, 13, 21]]
+        thresholds = [5]
+    elif ema_sharpe < 0.67:
+        windows = [[34, 55]]
+        thresholds = [7]
+    else:
+        windows = [[89, 144]]
+        thresholds = [10]
+    sensitivity = 50
+    return convert_to_array(windows), convert_to_type(thresholds, int), convert_to_type(sensitivity, float)
+
+def param_func_tide(x, i, col_index=None):
     """
     Template for dynamic parameters function
     where x is a np_array of cols + dynamic_param_col
     """
-    window_lengths = [[5, 20, 67]]
-    thresholds = [0.1]
-    sensitivity = [50]
-    return window_lengths, thresholds, sensitivity
+    windows = [[5, 20, 67]]
+    thresholds = [10]
+    sensitivity = [0.5]
+    return convert_to_array(windows), convert_to_type(thresholds, int), convert_to_type(sensitivity, float)
 
-def rolling_tide(np_col, tide_window_threshold_func, fixed_window=False):
-    tide,ebb,flow = nb_tide(np_col,
-                            fixed_window=fixed_window,
-                            tide_window_threshold_func=tide_window_threshold_func,)
-    return tide,ebb,flow
 
 
 def calc_tide_sig(df0, 
              cols_set = [['open','high','low']],
-             tide_window_threshold_func = tide_window_threshold_func,
+             param_func_tide = param_func_tide,
              sig_name_1 = "tide",
              sig_name_2 = "ebb",
              sig_name_3 = "flow",
              fixed_window=False,
-            dynamic_param_col = None ):
+            dynamic_param_col = None,
+            dynamic_param_combine = True):
     """
     Calculate the tide, ebb, and flow signals for a data set.
 
     Args:
         df0: The data set.
         cols_set: The list of columns to use for the signal.
-        tide_window_threshold_func: The function to calculate the window lengths, thresholds, and sensitivity parameters.
+        param_func_tide: The function to calculate the window lengths, thresholds, and sensitivity parameters.
         sig_name_1: The name of the column for the tide signal.
         sig_name_2: The name of the column for the ebb signal.
         sig_name_3: The name of the column for the flow signal.
@@ -603,74 +737,320 @@ def calc_tide_sig(df0,
     Returns:
         A new data set with the tide, ebb, and flow signals added.
     """
-
+    # print(df0.head(20))
     df = df0.copy() # if somehow need to save initial state of df before adding signals
+    df["date_time"] = df.index  
     for cols in tqdm(cols_set):
-        # print(f"col: {col}")
+        df[cols] = df[cols].copy().fillna(method='ffill')
         if dynamic_param_col is not None:
-            np_col = df[cols+dynamic_param_col].values
+            col_names = ['date_time']+cols+dynamic_param_col
+            col_index = find_list_index(col_names, dynamic_param_col)
+            # print(f"=========> col_index: {col_index}")
+            np_col = df[col_names].values
+            # print(f"col_names: {col_names}, df[col_names]: {df[col_names].head(10)}")
         else:
-            np_col = df[cols].values
-
-        # print(f"len np_col: {len(np_col)}")
+            col_names = ['date_time']+cols
+            np_col = df[col_names].values
+         # THIS COULD BE SOURCE OF POTENTIAL POINTER / COPY ERROR 
+        # print(f"cols: {cols}, np_col: {np_col}")
         tide,ebb,flow = rolling_tide(np_col,
-                                     tide_window_threshold_func = tide_window_threshold_func,
-                                     fixed_window = fixed_window,)
+                                     param_func_tide = param_func_tide,
+                                     fixed_window = fixed_window,
+                                     col_index=col_index)
         # print(f"shape tide: {np.shape(tide)}, shape ebb: {np.shape(ebb)}, shape flow: {np.shape(flow)}")
         df1 = df.copy()
         # print(f"len df1: {len(df1)}")
         # if window_threshold_func() 
         for t,i in zip(df1.index, range(len(df1))):
             # print(f"t: {t}, i: {i}")
-            windows, thresholds, sensitivities = tide_window_threshold_func(df1.iloc[i], i)
-            for k, window in enumerate(windows):
-                for j, threshold in enumerate(thresholds):
+            windows, thresholds, sensitivities = param_func_tide(np_col, i, col_index)
+            # print(f"i-{i}: post processing\n--> tide shape: {np.shape(tide[i])} --> {tide[i]}\n--> windows: {windows}\n-->thresholds: {thresholds}\n-->sensitivities: {sensitivities}")
+            for w, window in enumerate(windows):
+                for th, threshold in enumerate(thresholds):
                     window_label = "-".join([f"{i}" for i in window])
-                    df1.at[t, f"{sig_name_1}_w{window_label}t{threshold}"] = tide[i][j, k]
-                    df1.at[t, f"{sig_name_2}_w{window_label}t{threshold}"] = ebb[i][j, k]
-                    df1.at[t, f"{sig_name_3}_w{window_label}t{threshold}"] = flow[i][j, k]
+                    if dynamic_param_combine:
+                        df1.at[t, f"{sig_name_1}"] = tide[i][th, w]
+                        df1.at[t, f"{sig_name_2}"] = ebb[i][th, w]
+                        df1.at[t, f"{sig_name_3}"] = flow[i][th, w]
+                    else:
+                        df1.at[t, f"{sig_name_1}_w{window_label}t{threshold}"] = tide[i][th, w]
+                        df1.at[t, f"{sig_name_2}_w{window_label}t{threshold}"] = ebb[i][th, w]
+                        df1.at[t, f"{sig_name_3}_w{window_label}t{threshold}"] = flow[i][th, w]
 
         df = df1.copy()
     return df1
     
-# ======================================================================
-#                               Tide derivatives
-# ======================================================================
-def calc_tides_old(df, sensitivity:int=50,
-               thresholds:int=10, 
-               windows:np.ndarray=np.array([5, 20, 67]),
-               price=["open","high","low"],
-               fixed_window = True,
-               suffix="_fast"):
-    assert type(sensitivity) == int
-    assert type(thresholds) == int
-    if type(windows) is not np.ndarray:
-        windows = np.array(windows)
-    
-    open_ = df[price[0]].to_numpy()
-    high = df[price[1]].to_numpy()
-    low = df[price[2]].to_numpy()
-    # close = df["close"].to_numpy()
 
-    tides, ebb, flow = nb_tide(open_=open_,
-                               high=high,
-                               low=low,
-                               # close=close,
-                               windows=windows,
-                               thresholds=thresholds,
-                               sensitivity=sensitivity,
-                               fixed_window=fixed_window)
+
+# ============================================================================================================================================
+# ============================================================================================================================================
+#                               Z Signal
+# ============================================================================================================================================
+# ============================================================================================================================================
+
+def param_func_Z_EMAVol(x, i, col_index = None):
+    q_Lb, q_Ls, q_Sb, q_Ss = 0.8, 0.2, 0.2, 0.8
+    # Calculate the volatility of the input data
+    # print(col_index)
+    vol_col = col_index[0]
+    try:
+        ret_vol = x[i-24:i+1,vol_col]
+        vol_sharpe = np.mean(ret_vol)/np.std(ret_vol) # This should be a EMA vol calculated outside\
+        ema_sharpe_spam = vol_sharpe.ewm(span=81)
+        ema_sharpe = ema_sharpe_spam.mean()
+        q_Lb = ema_sharpe_spam.quantile(q=q_Lb)
+        q_Ls = ema_sharpe_spam.quantile(q=q_Ls)
+        q_Sb = ema_sharpe_spam.quantile(q=q_Sb)
+        q_Ss = ema_sharpe_spam.quantile(q=q_Ss)
+        # print(f"EMA sharpe: {ema_sharpe}")
+    except Exception as e:
+        ema_sharpe = 0
+    # print(f"volatility in dynamic_params_func {i}: {volatility}") # This is too smooth to be vol triggers have to change for future use
+    # Set the window lengths and threshold values based on the volatility
+    if 0.67 <= ema_sharpe:
+        windows = [72]
+        thresholds = [2]
+    elif ema_sharpe < 0.67:
+        windows = [288]
+        thresholds = [2]
+    else:
+        windows = [576]
+        thresholds = [2]
+    return convert_to_array(windows), convert_to_type(thresholds, int)
+
+
+# @nb.njit(cache=True)
+def param_func_Z(x, i, col_index=None):
+    """
+    Template for dynamic parameters function
+    where x is a np_array of cols + dynamic_param_col
+    """
+    windows = [288]
+    thresholds = [2]
+    return convert_to_array(windows), convert_to_type(thresholds, int)
+
+
+# @nb.njit(cache=True)
+def rolling_zscore(np_col,
+                    param_func_Z,
+                    col_index = None):
+    """
+    This function calculates the rolling z-score for a data set.
+    """
+    n = len(np_col)
     
-    df[f"tide{suffix}"] = tides
-    df[f"tide{suffix}"]=df[f"tide{suffix}"].replace(0,-1)
-    # df["tide_id"] = tide_ids
-    df[f"ebb{suffix}"] = ebb
-    df[f"flow{suffix}"] = flow
-    # Other metrics needed from id
-    # len of tide
-    # str of tide (close[-1] - close[0])
-    
+    windows, thresholds = param_func_Z(np_col, 0, col_index)
+    max_lookback = np.max(windows) # this could be list
+    z_i_np = np.full((len(windows)), np.nan)
+    # print(z_i_np)
+    z_list = [z_i_np]*max_lookback
+
+    sigs_i = np.full((len(windows), len(thresholds)), np.nan)
+    sigs_list = [sigs_i]*max_lookback
+
+    # print(f"len(np_col): {len(np_col)}")
+    for i in tqdm(range(max_lookback,n+1)):
+        windows, thresholds = param_func_Z(np_col, i, col_index)
+        # print(f"i: {i}, windows: {windows}")
+        sigs_i = np.full((len(windows), len(thresholds)), np.nan)
+        for w, window in enumerate(windows):
+            price_i=np_col[i-window+1:i+1,1].astype(float)
+            # print(f"{i} --> price_i: {np.shape(price_i)} | {type(np.sum(price_i))}\n{price_i}")
+            price_i = price_i[~np.isnan(price_i)]
+            ret = np.diff(np.log(price_i))
+
+            if (len(ret) == 0) or (np.std(ret) == 0.0):
+                res = 0
+                z_i_np[w]=res
+            else:
+                res = (ret[-1] - np.mean(ret))/np.std(ret)
+                z_i_np[w] = res
+                
+            for th, threshold in enumerate(thresholds):
+                res1 = np.sign(res) * np.floor(abs(res)) * (abs(res) >= threshold)
+                sigs_i[w, th] = res1
+        z_list.append(z_i_np)
+        sigs_list.append(sigs_i)
+    return z_list,sigs_list
+
+
+def calc_z_sig(df0, 
+             cols_set = [['open'],['high'],['low']],
+             param_func_Z = param_func_Z, # can this work?! wouldnt python see , i as another new param to function? 
+             sig_name_1 = "z",
+             sig_name_2 = "sig",
+             dynamic_param_col=None,
+             dynamic_param_combine = True):
+    """
+    Financial meaning behind parameters
+    window_func: can lambda x, i:288 even work as a parameter? wouldnt the function confuse i to be a parameter? ans: yes it works. but why? ans: because the function is not called here. it is only defined here. it is called in the rolling_zscore function.
+        -The choice of an appropriate window length would depend on various factors, such as the characteristics of the underlying data and the specific use case for the rolling z-score. 
+        - A longer window length would result in a smoother rolling z-score, as it would be less sensitive to short-term fluctuations in the data. 
+        - Conversely, a shorter window length would result in a more responsive rolling z-score, as it would be more sensitive to recent changes in the data.
+        - There is no one-size-fits-all answer to what would be an optimal window length, as it would depend on the specific use case and characteristics of the underlying data.
+        - However, some common approaches to choosing an appropriate window length include:
+            - Using a fixed window length based on prior knowledge or experience with similar data.
+            - Using a dynamic window length that adapts to changes in the underlying data.
+            - Using multiple window lengths to capture both short-term and long-term trends in the data.
+        - USE CASE 1: Volatility switching signal 
+            - For example, you could pass in a function that calculates the window lengths based on the volatility of the input data.
+            - In periods of high volatility, the function could return shorter window lengths to make the rolling z-score more responsive to recent changes in the data. 
+            - Conversely, in periods of low volatility, the function could return longer window lengths to smooth out short-term fluctuations in the data.
+        - USE CASE 2: Trend following signal
+            - Another approach could be to use a function that adapts the window lengths based on some other measure of the data’s characteristics, such as its trend or seasonality.
+            - The specific implementation of the dynamic window function would depend on your specific use case and the characteristics of the underlying financial data.
+    threshold: 
+        - controls sensitivity of the signal to changes in the rolling z-score. 
+        - could be used for instruments with higher volatility, as larger changes in the rolling z-score
+            would be expected due to higher volatility. 
+        -  Conversely, a lower threshold could be used for instruments with lower volatility,
+            as smaller changes in the rolling z-score would be expected due to lower volatility.
+        - USE CASE 1: Volatility switching signal
+
+            Question: how do i chat with you? your answer: you can use the chat function on the right hand side of the screen.
+    """
+    df = df0.copy() # if somehow need to save initial state of df before adding signals
+    df["date_time"] = df.index
+    for col in tqdm(cols_set):
+        # print(f"col: {col}")
+        if dynamic_param_col is not None:
+            df[col] = df[col].copy().fillna(method='ffill')
+            col_names = ['date_time']+col+dynamic_param_col
+            # print(f"find_list_index(col_names, dynamic_param_col)\nfind_list_index({col_names}, {dynamic_param_col})")
+            col_index = find_list_index(col_names, dynamic_param_col)
+            # print(f"col_index: {col_index}")
+            np_col = df[col_names].values
+        else:
+            col_names = ['date_time']+col
+            np_col = df[col_names].values
+        # print(f"col: {col} np_col: {np_col}")
+        z,sigs= rolling_zscore(np_col=np_col,
+                              param_func_Z = param_func_Z,
+                              col_index=col_index)
+
+        df1 = df.copy()
+
+        # print(f"shape z: {np.shape(z)}, shape sigs: {np.shape(sigs)}, len df: {len(df1)}")
+        # if window_threshold_func() 
+        for t,i in zip(df1.index, range(len(df1))):
+            windows, thresholds = param_func_Z(np_col, i,col_index)
+            for w, window in enumerate(windows):
+                if dynamic_param_combine:
+                    try:
+                        df1.at[t,f"{sig_name_1}"] = z[i][w]
+                    except Exception as e:
+                        print(f"z: {z}")
+                        raise Exception(e)
+                else:
+                    df1.at[t,f"{col}_{sig_name_1}_w{window}"] = z[i][w]
+
+                for th, threshold in enumerate(thresholds):
+                    if dynamic_param_combine:
+                        df1.at[t, f"{sig_name_2}"] = sigs[i][w, th]
+                    else:
+                        df1.at[t, f"{col}_{sig_name_2}_w{window}t{threshold}"] = sigs[i][w, th]
+
+        df = df1.copy()
+    return df1
+
+
+def calc_sig_strengths(df0, 
+                        signal = "sig",
+                        penalty = 1, # this widens the SL so that it is not hit too often
+                        tp_position_dict = {"TP1": {"long":{"lookback":3, "qtl": 0.3}, 
+                                                    "short": {"lookback":3, "qtl":0.3}
+                                                    },
+                                            "TP2": {"long":{"lookback":6, "qtl": 0.66}, 
+                                                    "short": {"lookback":6, "qtl":0.66}
+                                                    },
+                                            "TP3": {"long":{"lookback":9, "qtl": 0.99}, 
+                                                    "short": {"lookback":9, "qtl":0.99}
+                                                    }
+                                            }
+                        ):
+    df = df0.copy()
+
+    # print(df["S_positions"])
+    # create a column to track the change in tide
+    df[f'short_change'] = df["S_positions"].diff().ne(0).cumsum()
+    df[f'long_change'] = df["L_positions"].diff().ne(0).cumsum()
+    # create a column to count the duration of each tide
+    df[f'{signal}_short_dur'] = df.groupby(f'short_change').cumcount() +1
+    df[f'{signal}_long_dur'] = df.groupby(f'long_change').cumcount() +1
+    # calculate percentile for tide_dur
+    df[f'{signal}_short_dur'] = df[f'{signal}_short_dur'].shift(1)
+    df[f'{signal}_long_dur'] = df[f'{signal}_long_dur'].shift(1)
+
+    # df.drop(columns=[f'short_change'], inplace=True)
+    # df.drop(columns=[f'long_change'], inplace=True)
+
+    df[f"{signal}_short_strength_t"] = np.where((df["S_rpnl"]>0), df[f'{signal}_short_dur'], np.nan)
+    df[f"{signal}_short_weakness_t"] = np.where((df["S_rpnl"]<0), df[f'{signal}_short_dur'], np.nan)
+
+    df[f"{signal}_long_strength_t"] = np.where((df["L_rpnl"]>0), df[f'{signal}_long_dur'], np.nan)
+    df[f"{signal}_long_weakness_t"] = np.where((df["L_rpnl"]<0), df[f'{signal}_long_dur'], np.nan)
+
+    # could have for multiple tide speeds, fast or slow
+    df[f"{signal}_short_strength"] = np.where((df["S_rpnl"]>0), df["S_rpnl"], np.nan)
+    df[f"{signal}_short_weakness"] = np.where((df["S_rpnl"]<0), df["S_rpnl"], np.nan)
+
+    df[f"{signal}_long_strength"] = np.where((df["L_rpnl"]>0), df["L_rpnl"], np.nan)
+    df[f"{signal}_long_weakness"] = np.where((df["L_rpnl"]<0), df["L_rpnl"], np.nan)
+    # df["tide_short_str"] = np.where(df["tide"] > 0, df["S_pnl"], np.nan)
+    # df["tide_long_str"] = np.where(df["tide"] < 0, df["L_pnl"], np.nan)
+
+    # ALERT: tide_long_this should look at str_window amounts of tide-strengths, not str_window number of time periods
+    # df["tide_short_z"] = calc_rolling_sr(df["tide_short_str"].dropna().values, window=str_window)
+    # df["tide_long_z"] = calc_rolling_sr(df["tide_long_str"].dropna().values, window=str_window)
+
+    for tp in ["TP1", "TP2", "TP3"]:
+        for position in ["long", "short"]:
+            # print(f"{tp} --> {position}")
+            try:
+                lookback = tp_position_dict[tp][position]["lookback"]
+            except Exception as e:
+                print(f"tp_position_dict[{tp}][{position}] does not exist: {e}")
+                continue
+            qtl = tp_position_dict[tp][position]["qtl"]
+            df[f"{signal}_{position}_{tp}_strength"] = df[f"{signal}_{position}_strength"].dropna().rolling(lookback).quantile(qtl)
+            df[f"{signal}_{position}_{tp}_strength"]=df[f"{signal}_{position}_{tp}_strength"].fillna(method="ffill")
+
+            df[f"{signal}_{position}_{tp}_weakness"] = df[f"{signal}_{position}_weakness"].dropna().rolling(lookback).quantile(1-qtl)
+            df[f"{signal}_{position}_{tp}_weakness"]=df[f"{signal}_{position}_{tp}_weakness"].fillna(method="ffill")
+
+            df[f"{signal}_{position}_{tp}_strength_t"] = df[f"{signal}_{position}_strength_t"].dropna().rolling(lookback).quantile(qtl)#-1
+            df[f"{signal}_{position}_{tp}_strength_t"]=df[f"{signal}_{position}_{tp}_strength_t"].fillna(method="ffill")
+
+            df[f"{signal}_{position}_{tp}_weakness_t"] = df[f"{signal}_{position}_weakness_t"].dropna().rolling(lookback).quantile(1-qtl)#-1
+            df[f"{signal}_{position}_{tp}_weakness_t"]= df[f"{signal}_{position}_{tp}_weakness_t"].fillna(method="ffill")
+
+            if position == "long":
+                x = 1 
+            elif position == "short":
+                x = -1
+
+            # PRICE TP and SL
+            df[f"{signal}_{position}_{tp}"] = df["close"] +x*df[f"{signal}_{position}_{tp}_strength"] 
+            df[f"{signal}_{position}_SL{tp[-1]}"] = df["close"] - penalty*abs(df[f"{signal}_{position}_{tp}_weakness"])
+
+            # TIME TP AND SL
+            df[f"{signal}_{position}_{tp}_t"] = df[f"{signal}_{position}_{tp}_strength_t"] 
+            df[f"{signal}_{position}_SL{tp[-1]}_t"] = df[f"{signal}_{position}_{tp}_weakness_t"]
+
+            # df[f"tide_{position}_{tp}"]=df[f"tide_{position}_{tp}"].fillna(method="ffill")
+
+            # Risk reward ratio
+            df[f"{signal}_{position}_RRRatio{tp[-1]}"] = abs(df["close"]-df[f"{signal}_{position}_SL{tp[-1]}"])/abs(df["close"] - df[f"{signal}_{position}_{tp}"])
+            df[f"{signal}_{position}_ub_RRRatio{tp[-1]}"] = df[f"{signal}_{position}_RRRatio{tp[-1]}"].dropna().rolling(lookback).quantile(qtl)#-1
+            df[f"{signal}_{position}_lb_RRRatio{tp[-1]}"] = df[f"{signal}_{position}_RRRatio{tp[-1]}"].dropna().rolling(lookback).quantile(1-qtl)#-1
+
     return df
+# ============================================================================================================================================
+# ============================================================================================================================================
+#                               Tides Derivatives
+# ============================================================================================================================================
+# ============================================================================================================================================
+
 
 def calc_tide_strengths(df0,
                         penalty = 1, # this widens the SL so that it is not hit too often
@@ -760,134 +1140,13 @@ def calc_tide_strengths(df0,
 
     return df
 
-# ======================================================================
-#                               z signal
-# ======================================================================
-def window_threshold_func_vol(x, i):
-    """
-    Template for dynamic parameters function
-    where x is a np_array of cols + dynamic_param_col
-    """
-    # Calculate the volatility of the input data
-    volatility = np.std(x) # This is too smooth to be vol triggers have to change for future use
-    
-    # Set the window lengths and threshold values based on the volatility
-    if volatility < 0.01:
-        windows = [288, 576]
-        thresholds = [1.5, 2, 2.5]
-    elif volatility < 0.05:
-        windows = [144, 288]
-        thresholds = [1, 1.5, 2]
-    else:
-        windows = [72, 144]
-        thresholds = [0.5, 1, 1.5]
-    
-    return windows, thresholds
 
-# @nb.njit(cache=True)
-def window_threshold_func(x, i):
-    """
-    Template for dynamic parameters function
-    where x is a np_array of cols + dynamic_param_col
-    """
-    return [288], [2]
-    # return [3,5,8,13,21,81,288], [2,1,3,4,5,6,7,8]
+# ============================================================================================================================================
+# ============================================================================================================================================
+#                               Slopes
+# ============================================================================================================================================
+# ============================================================================================================================================
 
-# @nb.njit(cache=True)
-def rolling_zscore(np_col, window_threshold_func):
-    z = np.full(len(np_col), np.nan)
-    sigs = []
-    # print(f"len(np_col): {len(np_col)}")
-    for i in range(len(np_col)):
-        windows, thresholds = window_threshold_func(np_col, i)
-        sigs_i = np.full((len(windows), len(thresholds)), np.nan)
-        for k, window in enumerate(windows):
-            if i >= window-1:
-                np_col_i=np_col[i-window+1:i+1]
-                np_col_i = np_col_i[~np.isnan(np_col_i)]
-                ret = np.diff(np.log(np_col_i))
-
-                if (len(ret) == 0) or (np.std(ret) == 0.0):
-                    res = 0
-                    z[i]=res
-                else:
-                    res = (ret[-1] - np.mean(ret))/np.std(ret)
-                    z[i]=res
-
-                for j, threshold in enumerate(thresholds):
-                    res1 = np.sign(res) * np.floor(abs(res)) * (abs(res) >= threshold)
-                    sigs_i[k, j] = res1
-        sigs.append(sigs_i)
-    return z,sigs
-
-from tqdm import tqdm
-
-def calc_z_sig(df0, 
-             cols = ['open','high','low'],
-             window_threshold_func = lambda x, i: ([3,5,8,13,21,81,288], [2,1,3,4,5,6,7,8]), # can this work?! wouldnt python see , i as another new param to function? 
-             sig_name_1 = "z",
-             sig_name_2 = "sig",
-             dynamic_param_col=None):
-    """
-    Financial meaning behind parameters
-    window_func: can lambda x, i:288 even work as a parameter? wouldnt the function confuse i to be a parameter? ans: yes it works. but why? ans: because the function is not called here. it is only defined here. it is called in the rolling_zscore function.
-        -The choice of an appropriate window length would depend on various factors, such as the characteristics of the underlying data and the specific use case for the rolling z-score. 
-        - A longer window length would result in a smoother rolling z-score, as it would be less sensitive to short-term fluctuations in the data. 
-        - Conversely, a shorter window length would result in a more responsive rolling z-score, as it would be more sensitive to recent changes in the data.
-        - There is no one-size-fits-all answer to what would be an optimal window length, as it would depend on the specific use case and characteristics of the underlying data.
-        - However, some common approaches to choosing an appropriate window length include:
-            - Using a fixed window length based on prior knowledge or experience with similar data.
-            - Using a dynamic window length that adapts to changes in the underlying data.
-            - Using multiple window lengths to capture both short-term and long-term trends in the data.
-        - USE CASE 1: Volatility switching signal 
-            - For example, you could pass in a function that calculates the window lengths based on the volatility of the input data.
-            - In periods of high volatility, the function could return shorter window lengths to make the rolling z-score more responsive to recent changes in the data. 
-            - Conversely, in periods of low volatility, the function could return longer window lengths to smooth out short-term fluctuations in the data.
-        - USE CASE 2: Trend following signal
-            - Another approach could be to use a function that adapts the window lengths based on some other measure of the data’s characteristics, such as its trend or seasonality.
-            - The specific implementation of the dynamic window function would depend on your specific use case and the characteristics of the underlying financial data.
-    threshold: 
-        - controls sensitivity of the signal to changes in the rolling z-score. 
-        - could be used for instruments with higher volatility, as larger changes in the rolling z-score
-            would be expected due to higher volatility. 
-        -  Conversely, a lower threshold could be used for instruments with lower volatility,
-            as smaller changes in the rolling z-score would be expected due to lower volatility.
-        - USE CASE 1: Volatility switching signal
-
-            Question: how do i chat with you? your answer: you can use the chat function on the right hand side of the screen.
-    """
-    df = df0.copy() # if somehow need to save initial state of df before adding signals
-    for col in tqdm(cols):
-        # print(f"col: {col}")
-        if dynamic_param_col is not None:
-            np_col = df[cols+dynamic_param_col].values
-        else:
-            np_col = df[cols]
-        # print(f"len np_col: {len(np_col)}")
-        z,sigs= rolling_zscore(np_col=np_col,
-                              window_threshold_func = window_threshold_func
-                              )
-
-        df1 = df.copy()
-        df1[f"{col}_{sig_name_1}"] = z
-        # print(f"shape z: {np.shape(z)}, shape sigs: {np.shape(sigs)}, len df: {len(df1)}")
-        # if window_threshold_func() 
-        for t,i in zip(df1.index, range(len(df1))):
-            windows, thresholds = window_threshold_func(df1.iloc[i], i)
-            for k, window in enumerate(windows):
-                for j, threshold in enumerate(thresholds):
-                    df1.at[t, f"{col}_{sig_name_2}_w{window}t{threshold}"] = sigs[i][k, j]
-
-        df = df1.copy()
-    return df1
-
-
-
-# 
-
-# ======================================================================
-#                               SLOPES
-# ======================================================================
 def calc_slopes(df0,
                 slope_lengths:list=[7,10,14,20,28,40,56,80],
                 scaling_factor:float = 1.0,
@@ -993,4 +1252,39 @@ def tide_colors(series):
 
     return [r if e < 0 else g if e >0 else w for e in series]  
 
+
+def ewmac(prices, window, alpha):
+    ewma = np.empty(len(prices))
+    ewma_old = prices[0]
+    ewma[0] = ewma_old
+
+    for i in range(1, len(prices)):
+        ewma_old = ewma_old * (1 - alpha) + prices[i] * alpha
+        ewma[i] = ewma_old
+
+    return ewma
+
+
+def calc_ewmac_sig(df0, 
+             cols = ['open','high','low'],
+             ewmac_window_func = lambda x: 288 * x,
+             ewmac_alpha_func = lambda x: 2 * x,
+             sig_name = "ewmac"):
+    df = df0.copy() # if somehow need to save initial state of df before adding signals
+    for col in tqdm(cols):
+        # print(f"col: {col}")
+        np_col = df[col].values
+        # print(f"len np_col: {len(np_col)}")
+        ewmac_window = ewmac_window_func(i)
+        ewmac_alpha = ewmac_alpha_func(i)
+        ewmac_col = ewmac(np_col, ewmac_window, ewmac_alpha)
+        df1 = df.copy()
+        df1[f"{col}_{sig_name}"] = ewmac_col
+
+        df = df1.copy()
+    return df1
+
+
+
+#%%
 
