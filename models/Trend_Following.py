@@ -201,15 +201,15 @@ def get_tide_sig(i,np_closePx, signals_dict, sig_lag=0, position="long",side="bu
         i_lagged = i
     if position == "long":        
         if side == "buy": 
-            signal = signals_dict["tide"][i_lagged] == 1
+            signal = signals_dict["tide"][i_lagged] == 1 and signals_dict["tide"][i_lagged-1] 
         elif side == "sell":
-            signal = signals_dict["tide"][i_lagged] == 0
+            signal = signals_dict["tide"][i_lagged] < 1
             
     elif position == "short":
         if side == "buy": 
-            signal = signals_dict["tide"][i_lagged] == 0
+            signal = signals_dict["tide"][i_lagged] == -1 and signals_dict["tide"][i_lagged-1] != 1
         elif side == "sell":
-            signal = signals_dict["tide"][i_lagged] == 1 
+            signal = signals_dict["tide"][i_lagged] == 0
     # if signal:
     #     print(f"i: {i}, signal: {signal}")
     return signal

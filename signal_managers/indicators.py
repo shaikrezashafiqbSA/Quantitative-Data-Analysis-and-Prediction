@@ -409,16 +409,10 @@ def rolling_sum(heights, w=4):
 
 
 # @nb.njit(cache=True)
-def calc_exponential_height(heights, w):  ## CHECK!!
-    # heights = OHLCVT_array[:,1]-OHLCVT_array[:,2]
+def calc_exponential_height(heights, w):  
     rolling_sum_H_L = rolling_sum(heights, w)
-    # rolling_sum_H_L = np.full(len(heights),np.nan)
-    # for idx in range(window-1,len(heights)):
-    #     # print(f"summing {start_idx} to {idx}")
-    #     rolling_sum_H_L[idx] = np.sum(heights[idx-window+1:idx])
-    # mpbw=(heights.rolling(window=w).sum())
     exp_height = (rolling_sum_H_L[-1] - heights[-w] + heights[-1]) / w
-    return exp_height  # (mpbw.iloc[-1]-heights[-w]+heights[-1])/w
+    return exp_height 
 
 
 # @nb.njit(cache=True)
@@ -432,18 +426,15 @@ def calc_tide(open_i: np.array,
               thresholds: int,
               sensitivity: float) -> np.array:
     
-
     new_open = open_i[-1]
     new_high = high_i[-1]
     new_low = low_i[-1]
-    # print(f"new_open: {new_open}, new_high: {new_high}, new_low: {new_low}")    
+
     if np.isnan(previous_tide):
         previous_tide = 1
     if np.isnan(previous_ebb):
         previous_ebb = new_open
 
-    # undertow = [[1 if new_open > previous_ebb else 0] if previous_tide == 0 else [1 if new_open < previous_ebb else 0]][0][0]
-    " undertow "
     if previous_tide:
         if new_open < previous_ebb:
             undertow = 1
@@ -455,8 +446,6 @@ def calc_tide(open_i: np.array,
         else:
             undertow = 0
 
-    # surftow = [[1 if new_high > previous_ebb else 0] if previous_tide == 0 else [1 if new_low < previous_ebb else 0]][0][0]
-    " surftow "
     if previous_tide:
         if new_low < previous_ebb:
             surftow = 1
@@ -468,23 +457,16 @@ def calc_tide(open_i: np.array,
         else:
             surftow = 0
 
-    " Calculate change in tide: flow"
-
-    # heights = df["high_i"][-67:]-df["low_i"][-67:]
     heights = high_i - low_i
     heights = heights[-max(windows):]
 
     w_0 = 0
     for w in windows:
         w_i = calc_exponential_height(heights, w)
-        # print(f"w_0: {w_0}, w_i: {w_i}, w: {w}: heights: {heights}")
         if w_i > w_0:
             max_exp_height = w_i
             w_0 = w_i
-        # print(max_exp_height)
-    # max_exp_height=max([calc_exponential_height(heights,w) for w in windows])#calc_exponential_height(prices,lengths[0]),calc_exponential_height(prices,lengths[1]),calc_exponential_height(prices,lengths[2]))    #THIS CAN BE CHANGED TO separate rolling functions#
 
-    # sensitivity=sensitivity/100
     max_exp_height_ranges = list(np.quantile(heights, np.linspace(0, 1, thresholds)))
     max_exp_height_ranges = [0] + max_exp_height_ranges + [np.inf]
     additives_range = np.linspace(0, np.quantile(heights, sensitivity), len(max_exp_height_ranges) + 1)
@@ -498,21 +480,16 @@ def calc_tide(open_i: np.array,
         else:
             i += 1
 
-    " flow "
-    # flow = [previous_ebb+additive if previous_tide == 1 else previous_ebb-additive][0]
     if previous_tide:
         flow = previous_ebb + additive
     else:
         flow = previous_ebb - additive
 
-    " interim tides "
-    # tide_1 = [1 if new_open >= flow else 0][0]
     if new_open >= flow:
         tide_1 = 1
     else:
         tide_1 = 0
 
-    # tide_2 = [[1 if new_low < previous_ebb else 0] if tide_1 == 1 else [1 if new_high > previous_ebb else 0]][0][0]
     if tide_1:
         if new_low < previous_ebb:
             tide_2 = 1
@@ -524,7 +501,6 @@ def calc_tide(open_i: np.array,
         else:
             tide_2 = 0
 
-    # tide_3 =[[1 if surftow == 1 else 0] if tide_2 ==1 else [[ 0 if undertow == 1 else 1] if surftow == 0 else 0]][0][0]
     if tide_2:
         if surftow:
             tide_3 = 1
@@ -539,7 +515,6 @@ def calc_tide(open_i: np.array,
         else:
             tide_3 = 0
 
-    # tide_4 = [[1 if new_low>=flow else 0] if tide_1 == 1 else [1 if new_high > flow else 0]][0][0]
     if tide_1:
         if new_low >= flow:
             tide_4 = 1
@@ -551,13 +526,23 @@ def calc_tide(open_i: np.array,
         else:
             tide_4 = 0
 
-    " tide formulation "
-    if tide_1 == 1 and tide_4 == 1:
-        new_tide = 1
-    elif tide_1 == 0 and tide_4 == 0:
-        new_tide = 0
-    else:
-        new_tide = previous_tide
+    # " tide formulation "
+    # if tide_1 == 1 and tide_4 == 1:
+    #     new_tide = 1
+    # elif tide_1 == 0 and tide_4 == 0:
+    #     new_tide = 0
+    # else:
+    #     new_tide = previous_tide
+    # " tide formulation "
+    # if tide_1 == 1 and tide_4 == 1:
+    #     new_tide = 1
+    # elif tide_1 == 0 and tide_4 == 0:
+    #     new_tide = -1
+    # else:
+    #     new_tide = 0
+    
+    weights = [0.25, 0.25, 0.25, 0.25] # example weights
+    new_tide = (tide_1 * weights[0] + tide_2 * weights[1] + tide_3 * weights[2] + tide_4 * weights[3]) * 20 - 10
 
     " ebb Formulation "
     if tide_3 == 1:
@@ -647,8 +632,6 @@ def rolling_tide(np_col,
                                                     sensitivity=sensitivity) # to be generalised next
                 except Exception as e:
                     raise Exception(f"i: {i}, np_col = {np_col[:,1]}\nerror: {e}\n\n")
-                    # tide_i, ebb_i, flow_i = np.nan, np.nan, np.nan
-                # print(f"t:{t} w:{w} th:{th} ---> windows={windows}, threshold={threshold}, sensitivity={sensitivities[0]}")
                 
                 tide_i_np[th, w] = tide_i
                 ebb_i_np[th, w] = ebb_i
@@ -984,7 +967,7 @@ def calc_signal_TPSL(df0,
     # df.drop(columns=[f'short_change'], inplace=True)
     # df.drop(columns=[f'long_change'], inplace=True)
     df[f"{signal}_S_strength_t"] = np.where((df["S_rpnl"]>0), df[f'{signal}_S_dur'], np.nan)
-    df[f"{signal}_D_weakness_t"] = np.where((df["S_rpnl"]<0), df[f'{signal}_S_dur'], np.nan)
+    df[f"{signal}_S_weakness_t"] = np.where((df["S_rpnl"]<0), df[f'{signal}_S_dur'], np.nan)
 
     df[f"{signal}_L_strength_t"] = np.where((df["L_rpnl"]>0), df[f'{signal}_L_dur'], np.nan)
     df[f"{signal}_L_weakness_t"] = np.where((df["L_rpnl"]<0), df[f'{signal}_L_dur'], np.nan)
