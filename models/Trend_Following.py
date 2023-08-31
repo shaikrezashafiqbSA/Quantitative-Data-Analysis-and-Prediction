@@ -171,6 +171,75 @@ def get_signal_default(i,np_closePx, signals_dict, sig_lag=0, position="long",si
 
     return signal
 
+
+def get_signal_Y(i,np_closePx, signals_dict, sig_lag=0, position="long",side="buy",entry_i = None)-> bool:
+            
+    if position == "long":        
+        if side == "buy": 
+            signal = signals_dict["Y"][i-sig_lag]> 0
+        elif side == "sell":
+            signal = signals_dict["Y"][i-sig_lag]< 0
+            
+    elif position == "short":
+        if side == "buy": 
+            signal = signals_dict["Y"][i-sig_lag]< 0
+        elif side == "sell":
+            signal = signals_dict["Y"][i-sig_lag]> 0
+
+    return signal
+    
+    
+# =========================================================================================================================================
+#                                                           tide signals
+# =========================================================================================================================================
+def get_tide_sig(i,np_closePx, signals_dict, sig_lag=0, position="long",side="buy",**kwargs)-> bool:
+
+    # if i < L_q_lookback or i < S_q_lookback:
+    #     return False
+    i_lagged = i -sig_lag
+    if i_lagged >= len(signals_dict["tide"]):
+        i_lagged = i
+    if position == "long":        
+        if side == "buy": 
+            signal = signals_dict["tide"][i_lagged] == 1
+        elif side == "sell":
+            signal = signals_dict["tide"][i_lagged] == 0
+            
+    elif position == "short":
+        if side == "buy": 
+            signal = signals_dict["tide"][i_lagged] == 0
+        elif side == "sell":
+            signal = signals_dict["tide"][i_lagged] == 1 
+    # if signal:
+    #     print(f"i: {i}, signal: {signal}")
+    return signal
+
+
+def get_tide_sig_TP(i,np_closePx, signals_dict, sig_lag=0, position="long",side="buy",**kwargs)-> bool:
+
+    # if i < L_q_lookback or i < S_q_lookback:
+    #     return False
+    i_lagged = i -sig_lag
+    if i_lagged >= len(signals_dict["tide"]):
+        i_lagged = i
+    if position == "long":        
+        if side == "buy": 
+            signal = signals_dict["tide"][i_lagged] > 0
+        elif side == "sell":
+            signal = signals_dict["tide"][i_lagged] <= 0
+            
+    elif position == "short":
+        if side == "buy": 
+            signal = signals_dict["tide"][i_lagged] <= 0
+        elif side == "sell":
+            signal = signals_dict["tide"][i_lagged] > 0 
+    # if signal:
+    #     print(f"i: {i}, signal: {signal}")
+    return signal
+
+# =========================================================================================================================================
+#                                                           z signals
+# =========================================================================================================================================
 def get_z_sig(i,np_closePx, signals_dict, sig_lag=0, position="long",side="buy",**kwargs)-> bool:
     
     # if i < L_q_lookback or i < S_q_lookback:
@@ -199,7 +268,36 @@ def get_z_sig(i,np_closePx, signals_dict, sig_lag=0, position="long",side="buy",
 
     return signal
 
+
 def get_z_sig_TP(i,np_closePx, signals_dict, sig_lag=0, position="long",side="buy",**kwargs)-> bool:
+    
+    # if i < L_q_lookback or i < S_q_lookback:
+    #     return False
+    # print(signals_dict)
+    L_buy=kwargs.get("L_buy",1)
+    L_sell=kwargs.get("L_sell",1)
+    S_buy=kwargs.get("S_buy",-1)
+    S_sell=kwargs.get("S_sell",-1)
+
+    # print(f"S_sell: {kwargs.get('S_sell',-1)}")
+    sig_lagged = i -sig_lag
+    if sig_lagged >= i-1:
+        sig_lagged = i
+    if position == "long":        
+        if side == "buy": 
+            signal = signals_dict["sig_tide"][sig_lagged] >=L_buy
+        elif side == "sell":
+            signal = signals_dict["sig_tide"][sig_lagged] <L_sell
+            
+    elif position == "short":
+        if side == "buy": 
+            signal = signals_dict["sig_tide"][sig_lagged] <= S_buy
+        elif side == "sell":
+            signal = signals_dict["sig_tide"][sig_lagged] > S_sell
+
+    return signal
+
+# def get_z_sig_TP(i,np_closePx, signals_dict, sig_lag=0, position="long",side="buy",**kwargs)-> bool:
     L_buy=kwargs.get("L_buy",1)
     L_sell=kwargs.get("L_sell",1)
     S_buy=kwargs.get("S_buy",-1)
@@ -298,22 +396,6 @@ def get_z_sig_TP(i,np_closePx, signals_dict, sig_lag=0, position="long",side="bu
     return signal
 
 
-def get_signal_Y(i,np_closePx, signals_dict, sig_lag=0, position="long",side="buy",entry_i = None)-> bool:
-            
-    if position == "long":        
-        if side == "buy": 
-            signal = signals_dict["Y"][i-sig_lag]> 0
-        elif side == "sell":
-            signal = signals_dict["Y"][i-sig_lag]< 0
-            
-    elif position == "short":
-        if side == "buy": 
-            signal = signals_dict["Y"][i-sig_lag]< 0
-        elif side == "sell":
-            signal = signals_dict["Y"][i-sig_lag]> 0
-
-    return signal
-    
 
 
 
@@ -346,6 +428,10 @@ class model:
             _get_signal = get_signal_strengths
         elif signal_function == "strength_w_macros":
             _get_signal = get_signal_strengths_w_macros
+        elif signal_function == "tide":
+            _get_signal = get_tide_sig
+        elif signal_function == "tide_TP":
+            _get_signal = get_tide_sig_TP
         elif signal_function == "z_sig":
             _get_signal = model.get_z_sig
         elif signal_function == "z_sig_TP":

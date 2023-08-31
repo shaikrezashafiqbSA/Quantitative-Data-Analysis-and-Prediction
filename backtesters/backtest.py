@@ -9,103 +9,103 @@ from performance_analytics.metrics import backtest_summary
 from performance_analytics.backtest_plot import backtest_plots, backtest_plots_simplified, backtest_plots_ppt
 import models
 
-def get_signal_meta(i,np_closePx, signals_dict,sig_lag=0,position="long",side="buy",entry_i = None)-> bool:
-    L_uq=0.99
-    L_lq = 0.5
-    L_q_lookback = 36
+# def get_signal_meta(i,np_closePx, signals_dict,sig_lag=0,position="long",side="buy",entry_i = None)-> bool:
+#     L_uq=0.99
+#     L_lq = 0.5
+#     L_q_lookback = 36
     
-    S_uq=0.99
-    S_lq = 0.5
-    S_q_lookback = 36
-    if i < L_q_lookback or i < S_q_lookback:
-        return False
+#     S_uq=0.99
+#     S_lq = 0.5
+#     S_q_lookback = 36
+#     if i < L_q_lookback or i < S_q_lookback:
+#         return False
 
 
-    if position == "long":        
-        if side == "buy": 
-            new_signal = signals_dict["signal"][i]==1 #and signals_dict["signal"][i-1]==-1
-            signal_stronk = signals_dict["p"][i] >= np.quantile(signals_dict["p"][i-L_q_lookback:i+1],L_uq)
-            signal = new_signal and signal_stronk
-        elif side == "sell":
-            signal_degrade = signals_dict["signal"][i]==1 and signals_dict["p"][i] <= np.quantile(signals_dict["p"][i-L_q_lookback:i+1],L_lq)
-            # signal_degrade = signals_dict["signal"][i]==1 and signals_dict["p"][i] <= np.quantile(signals_dict["p"][entry_i:i],L_lq)
-            signal_flip = signals_dict["signal"][i]==-1 and signals_dict["p"][i] >= np.quantile(signals_dict["p"][i-S_q_lookback:i+1],S_uq)
-            signal = signal_degrade or signal_flip
+#     if position == "long":        
+#         if side == "buy": 
+#             new_signal = signals_dict["signal"][i]==1 #and signals_dict["signal"][i-1]==-1
+#             signal_stronk = signals_dict["p"][i] >= np.quantile(signals_dict["p"][i-L_q_lookback:i+1],L_uq)
+#             signal = new_signal and signal_stronk
+#         elif side == "sell":
+#             signal_degrade = signals_dict["signal"][i]==1 and signals_dict["p"][i] <= np.quantile(signals_dict["p"][i-L_q_lookback:i+1],L_lq)
+#             # signal_degrade = signals_dict["signal"][i]==1 and signals_dict["p"][i] <= np.quantile(signals_dict["p"][entry_i:i],L_lq)
+#             signal_flip = signals_dict["signal"][i]==-1 and signals_dict["p"][i] >= np.quantile(signals_dict["p"][i-S_q_lookback:i+1],S_uq)
+#             signal = signal_degrade or signal_flip
             
-    elif position == "short":
-        if side == "buy": 
-            new_signal = signals_dict["signal"][i]==-1 #and signals_dict["signal"][i-1]==1 
-            signal_stronk = signals_dict["p"][i] >= np.quantile(signals_dict["p"][i-S_q_lookback:i+1],S_uq) 
-            signal = new_signal and signal_stronk
-        elif side == "sell":
-            signal_degrade = signals_dict["signal"][i]==-1 and signals_dict["p"][i] <= np.quantile(signals_dict["p"][i-S_q_lookback:i+1],S_lq)
-            # signal_degrade = signals_dict["signal"][i]==-1 and signals_dict["p"][i] <= np.quantile(signals_dict["p"][entry_i:i],S_lq)
-            signal_flip = signals_dict["signal"][i]==1 and signals_dict["p"][i] >= np.quantile(signals_dict["p"][i-L_q_lookback:i+1],L_uq)
-            signal = signal_degrade or signal_flip
+#     elif position == "short":
+#         if side == "buy": 
+#             new_signal = signals_dict["signal"][i]==-1 #and signals_dict["signal"][i-1]==1 
+#             signal_stronk = signals_dict["p"][i] >= np.quantile(signals_dict["p"][i-S_q_lookback:i+1],S_uq) 
+#             signal = new_signal and signal_stronk
+#         elif side == "sell":
+#             signal_degrade = signals_dict["signal"][i]==-1 and signals_dict["p"][i] <= np.quantile(signals_dict["p"][i-S_q_lookback:i+1],S_lq)
+#             # signal_degrade = signals_dict["signal"][i]==-1 and signals_dict["p"][i] <= np.quantile(signals_dict["p"][entry_i:i],S_lq)
+#             signal_flip = signals_dict["signal"][i]==1 and signals_dict["p"][i] >= np.quantile(signals_dict["p"][i-L_q_lookback:i+1],L_uq)
+#             signal = signal_degrade or signal_flip
 
     
-    return signal
+#     return signal
 
-def get_signal_Y(i,np_closePx, signals_dict, sig_lag=0, position="long",side="buy",entry_i = None)-> bool:
+# def get_signal_Y(i,np_closePx, signals_dict, sig_lag=0, position="long",side="buy",entry_i = None)-> bool:
             
-    if position == "long":        
-        if side == "buy": 
-            signal = signals_dict["Y"][i-sig_lag]> 0
-        elif side == "sell":
-            signal = signals_dict["Y"][i-sig_lag]< 0
+#     if position == "long":        
+#         if side == "buy": 
+#             signal = signals_dict["Y"][i-sig_lag]> 0
+#         elif side == "sell":
+#             signal = signals_dict["Y"][i-sig_lag]< 0
             
-    elif position == "short":
-        if side == "buy": 
-            signal = signals_dict["Y"][i-sig_lag]< 0
-        elif side == "sell":
-            signal = signals_dict["Y"][i-sig_lag]> 0
+#     elif position == "short":
+#         if side == "buy": 
+#             signal = signals_dict["Y"][i-sig_lag]< 0
+#         elif side == "sell":
+#             signal = signals_dict["Y"][i-sig_lag]> 0
 
-    return signal
+#     return signal
 
 
-def get_signal_p(i,np_closePx, signals_dict, sig_lag=0, position="long",side="buy",entry_i = None)-> bool:
-    L_q=0.95
-    L_q_lookback = 96
+# def get_signal_p(i,np_closePx, signals_dict, sig_lag=0, position="long",side="buy",entry_i = None)-> bool:
+#     L_q=0.95
+#     L_q_lookback = 96
     
-    S_q=0.95
-    S_q_lookback = 96
-    if i < L_q_lookback or i < S_q_lookback:
-        return False         
-    if position == "long":        
-        if side == "buy": 
-            signal = signals_dict["p"][i] >= np.quantile(signals_dict["p"][i-L_q_lookback:i+1],L_q)
-        elif side == "sell":
-            signal = signals_dict["p"][i] <= np.quantile(signals_dict["p"][i-L_q_lookback:i+1],1-L_q)
+#     S_q=0.95
+#     S_q_lookback = 96
+#     if i < L_q_lookback or i < S_q_lookback:
+#         return False         
+#     if position == "long":        
+#         if side == "buy": 
+#             signal = signals_dict["p"][i] >= np.quantile(signals_dict["p"][i-L_q_lookback:i+1],L_q)
+#         elif side == "sell":
+#             signal = signals_dict["p"][i] <= np.quantile(signals_dict["p"][i-L_q_lookback:i+1],1-L_q)
             
-    elif position == "short":
-        if side == "buy": 
-            signal = (1-signals_dict["p"][i]) <= np.quantile(1-signals_dict["p"][i-S_q_lookback:i+1],S_q) 
-        elif side == "sell":
-            signal = (1-signals_dict["p"][i]) >= np.quantile(1-signals_dict["p"][i-S_q_lookback:i+1], 1-S_q)
+#     elif position == "short":
+#         if side == "buy": 
+#             signal = (1-signals_dict["p"][i]) <= np.quantile(1-signals_dict["p"][i-S_q_lookback:i+1],S_q) 
+#         elif side == "sell":
+#             signal = (1-signals_dict["p"][i]) >= np.quantile(1-signals_dict["p"][i-S_q_lookback:i+1], 1-S_q)
 
-    return signal
+#     return signal
 
-def get_signal_pud(i,np_closePx, signals_dict, sig_lag=0, position="long",side="buy",entry_i = None)-> bool:
-    L_q=0.95
-    L_q_lookback = 144
+# def get_signal_pud(i,np_closePx, signals_dict, sig_lag=0, position="long",side="buy",entry_i = None)-> bool:
+#     L_q=0.95
+#     L_q_lookback = 144
     
-    S_q=0.95
-    S_q_lookback = 144
-    if i < L_q_lookback or i < S_q_lookback:
-        return False         
-    if position == "long":        
-        if side == "buy": 
-            signal = signals_dict["p_u"][i] >= np.quantile(signals_dict["p_u"][i-L_q_lookback:i+1],L_q)
-        elif side == "sell":
-            signal = signals_dict["p_u"][i] < np.quantile(signals_dict["p_u"][i-L_q_lookback:i+1],1-L_q)
+#     S_q=0.95
+#     S_q_lookback = 144
+#     if i < L_q_lookback or i < S_q_lookback:
+#         return False         
+#     if position == "long":        
+#         if side == "buy": 
+#             signal = signals_dict["p_u"][i] >= np.quantile(signals_dict["p_u"][i-L_q_lookback:i+1],L_q)
+#         elif side == "sell":
+#             signal = signals_dict["p_u"][i] < np.quantile(signals_dict["p_u"][i-L_q_lookback:i+1],1-L_q)
             
-    elif position == "short":
-        if side == "buy": 
-            signal = signals_dict["p_d"][i] >= np.quantile(signals_dict["p_d"][i-S_q_lookback:i+1],S_q) 
-        elif side == "sell":
-            signal = signals_dict["p_d"][i] < np.quantile(signals_dict["p_d"][i-S_q_lookback:i+1],1-S_q)
+#     elif position == "short":
+#         if side == "buy": 
+#             signal = signals_dict["p_d"][i] >= np.quantile(signals_dict["p_d"][i-S_q_lookback:i+1],S_q) 
+#         elif side == "sell":
+#             signal = signals_dict["p_d"][i] < np.quantile(signals_dict["p_d"][i-S_q_lookback:i+1],1-S_q)
 
-    return signal
+#     return signal
 
 
 def _backtest(model_name,
@@ -161,20 +161,24 @@ def _backtest(model_name,
         _get_signal = model.get_signal_strengths_w_macros
     elif signal_function == "default":
         _get_signal = model.get_signal_default
+    elif signal_function == "tide":
+        _get_signal = model.get_tide_sig
+    elif signal_function == "tide_TP":
+        _get_signal = model.get_tide_sig_TP
     elif signal_function == "z_sig":
         _get_signal = model.get_z_sig
     elif signal_function == "z_sig_TP":
         _get_signal = model.get_z_sig_TP
-    elif signal_function == "meta":
-        _get_signal = get_signal_meta
-    elif signal_function == "Y":
-        _get_signal = get_signal_Y
-    elif signal_function == "p":
-        _get_signal = get_signal_p
-    elif signal_function  == "pud":
-        _get_signal = get_signal_pud
+    # elif signal_function == "meta":
+    #     _get_signal = get_signal_meta
+    # elif signal_function == "Y":
+    #     _get_signal = get_signal_Y
+    # elif signal_function == "p":
+    #     _get_signal = get_signal_p
+    # elif signal_function  == "pud":
+    #     _get_signal = get_signal_pud
     else:
-        raise Exception("Not valid signal function")
+        raise Exception(f"{signal_function} ---> is not valid signal function")
         
     # Piggyback signals dict for strat type TF / MR
     signals_dict["L"] = None         

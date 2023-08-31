@@ -40,7 +40,7 @@ from klines_managers import klines_ccxt
 from signal_managers.resampler import calc_klines_resample
 
 from utils.list_type_converter import convert_to_type,convert_to_array
-from signal_managers.indicators import calc_mfi_sig, param_func_mfi_EMAVol, param_func_mfi, calc_sig_strengths
+from signal_managers.indicators import calc_mfi_sig, param_func_mfi_EMAVol, param_func_mfi, calc_signal_TPSL
 from signal_managers.indicators import calc_tide_sig, calc_tide_sig, param_func_tide_EMAVol, param_func_tide
 from signal_managers.indicators import calc_z_sig, param_func_Z_EMAVol, param_func_Z
 from signal_managers.composite_signals import merge_sig_dicts
@@ -150,7 +150,8 @@ def objective_function(df=None,
                       instrument_to_trade = "ccxt_kucoin__BTC-USDT",
                       timeframe_to_trade = "1h",
                       signal_function = "z_sig",
-                      signals_to_trade = "sig",
+                      model_name= "Trend_Following",
+                      signal_to_trade = "sig",
                       sig_lag=0,
                       kline_to_trade = f"close",
                       volume_to_trade= f"volume",
@@ -164,7 +165,8 @@ def objective_function(df=None,
                       short_notional= 5e5,
                       show_plots=True, 
                       figsize = (20,15), 
-                      mutate_signals_w_TP = False,
+                      run_signals_w_TP= True,
+                      mutate_signals_w_TP = True,
                       tradable_times = None, #[["00:05", "23:50"]]
                       closing_session_times= None, #[["23:50", "00:00"]]
                       debug_verbose=True,
@@ -173,13 +175,10 @@ def objective_function(df=None,
         # =======================
         # BACKTEST
         # =======================
-        print(f"\n{'='*30}\n(1) Generate base z-signal to backtest so that can generate positions taken\n{'='*30}\n")
-
-        model_name= "Trend_Following"
-        signal_function="z_sig"
+        print(f"\n{'='*30}\n(1) Generate base {signal_to_trade}-signal to backtest so that can generate positions taken\n{'='*30}\n")
 
 
-        title = f"{timeframe_to_trade} {instrument_to_trade} Z | fees: {fee*1e4} bps"
+        title = f"{timeframe_to_trade} {instrument_to_trade} {signal_to_trade} | fees: {fee*1e4} bps"
         file_name = f"{timeframe_to_trade} {instrument_to_trade} Z"
 
         df_sig = df.copy()
@@ -188,8 +187,8 @@ def objective_function(df=None,
         # signals_to_trade= ["sig",signals_to_trade]
 
         df_trade = df_sig[backtest_window[0]:backtest_window[1]].copy()
-        df_trade["sig"] = df_trade[signals_to_trade]#.shift(-1).fillna(method="ffill")
-        signals_to_trade= ["sig"]
+        # df_trade["sig"] = df_trade[signal_to_trade]#.shift(-1).fillna(method="ffill")
+        signals_to_trade= list(df_trade.columns)
         df_backtested,df_trades,df_summary = backtest.backtest(model_name= model_name,
                                                         df0=df_trade,
                                                         timeframe=timeframe_to_trade,
@@ -222,95 +221,96 @@ def objective_function(df=None,
                                                         N=365*24,
                                                         **kwargs)
 
-
-        print(f"\n{'='*30}\n(2) TP based z-signal\n{'='*30}\n")
-        title = f"{timeframe_to_trade} {instrument_to_trade} Z TP | fees: {fee*1e4} bps"
-        file_name = f"{timeframe_to_trade} {instrument_to_trade} Z TP"
-        dfmtzTP = indicators.calc_sig_strengths(df_backtested, 
-                        signal = "sig",
-                        penalty = 1, # this widens the SL so that it is not hit too often
-                        tp_position_dict = {"TP1": {"long":{"lookback":3, "qtl": 0.8}, 
-                                                    "short": {"lookback":3, "qtl":0.6}
+        if run_signals_w_TP: 
+            print(f"\n{'='*30}\n(2) TP based {signal_to_trade} signal\n{'='*30}\n")
+            title = f"{timeframe_to_trade} {instrument_to_trade} {signal_to_trade} TP | fees: {fee*1e4} bps"
+            file_name = f"{timeframe_to_trade} {instrument_to_trade} {signal_to_trade} TP"
+            dfmtzTP = indicators.calc_signal_TPSL(df_backtested, 
+                            signal = signal_to_trade,
+                            penalty = 1, # this widens the SL so that it is not hit too often
+                            tp_position_dict =  {"TP1": {"L":{"lookback":6, "qtl": 0.1}, 
+                                                    "S": {"lookback":6, "qtl":0.1}
                                                     },
-                                            "TP2": {"long":{"lookback":6, "qtl": 0.8}, 
-                                                    "short": {"lookback":6, "qtl":0.8}
-                                                   },
-                                            "TP3": {"long":{"lookback":9, "qtl": 0.95}, 
-                                                    "short": {"lookback":9, "qtl":0.95}
-                                                   }
-                                           }
-                        )
+                                            "TP2": {"L":{"lookback":9, "qtl": 0.5}, 
+                                                    "S": {"lookback":9, "qtl":0.5}
+                                                    },
+                                            "TP3": {"L":{"lookback":12, "qtl": 0.6}, 
+                                                    "S": {"lookback":12, "qtl":0.6}
+                                                    }
+                                            }
+                            )
 
-        signal_function="z_sig_TP"
-        # Settings for long or short bias, since different trajectories with either
+            # signal_function2=f"z_sig_TP"
+            signal_function2 = f"{signal_to_trade}_TP"
+            # Settings for long or short bias, since different trajectories with either
 
-        # print(df_sig["sig"].hist())
+            # print(df_sig["sig"].hist())
 
-        """
-        This part here should be the same as the base strategy, but with the new TP overlays eg:
-        - TP1_long hit but not TP1_long_t so even though z_signal has flipped, lets chill first
-        - TP1_long hit and TP1_long_t hit so lets close the position
-        - TP1_long hit and TP1_long_t not hit so lets close the position if risk reward is high
-        """
-        # df_sig["sig"] = df_sig[signals_to_trade]#.shift(-1).fillna(method="ffill")
-        # print(dfmtzTP.filter(regex="sig_long_SL2")) there is sig_long_SL2 here 
-        df_trade = dfmtzTP[backtest_window[0]:backtest_window[1]].copy()
-        # df_trade["sig"] = df_trade[signals_to_trade]#.shift(-1).fillna(method="ffill")
-        signals_to_trade= list(df_trade.columns)
-        df_backtested,df_trades,df_summary = backtest.backtest(model_name= model_name,
-                                                        df0=df_trade,
-                                                        timeframe=timeframe_to_trade,
-                                                        kline_to_trade=kline_to_trade,
-                                                        volume_to_trade = volume_to_trade,
-                                                        tradable_times = tradable_times,
-                                                        closing_session_times = closing_session_times,
-                                                        position_sizing_to_trade=None,
-                                                        min_holding_period=min_holding_period,#/int(timeframe[:-1]),
-                                                        max_holding_period=max_holding_period,#/int(timeframe[:-1]),
-                                                        sig_lag=sig_lag,
-                                                        fee=fee,
-                                                        slippage=slippage,
-                                                        long_equity = long_equity,
-                                                        short_equity = short_equity,
-                                                        long_notional=long_notional,
-                                                        short_notional=short_notional,
-                                                        signals=signals_to_trade, 
-                                                        signal_function=signal_function, 
-                                                        figsize=figsize, # width, height
-                                                        show_B=True,
-                                                        show_LS=True,
-                                                        title=title,
-                                                        file_name=file_name,
-                                                        plots=True,
-                                                        diagnostics_verbose=False,
-                                                        trail_SL = None,
-                                                        trail_TP = None,
-                                                        trail_increment = None,
-                                                        N=365*24
-                                                        )
-    # =======================
-    # Mutate new tide strategy
-    # =======================
-    # has to have muateted something necessary for survival or remove unnecessary traits
-    # 1. mutate the tide by adding a new window
-    # 2. mutate the TP by adding a new window
-    # 3. mutate the SL by adding a new window
+            """
+            This part here should be the same as the base strategy, but with the new TP overlays eg:
+            - TP1_long hit but not TP1_long_t so even though z_signal has flipped, lets chill first
+            - TP1_long hit and TP1_long_t hit so lets close the position
+            - TP1_long hit and TP1_long_t not hit so lets close the position if risk reward is high
+            """
+            # df_sig["sig"] = df_sig[signals_to_trade]#.shift(-1).fillna(method="ffill")
+            # print(dfmtzTP.filter(regex="sig_long_SL2")) there is sig_long_SL2 here 
+            df_trade = dfmtzTP[backtest_window[0]:backtest_window[1]].copy()
+            # df_trade["sig"] = df_trade[signals_to_trade]#.shift(-1).fillna(method="ffill")
+            signals_to_trade= list(df_trade.columns)
+            df_backtested,df_trades,df_summary = backtest.backtest(model_name= model_name,
+                                                            df0=df_trade,
+                                                            timeframe=timeframe_to_trade,
+                                                            kline_to_trade=kline_to_trade,
+                                                            volume_to_trade = volume_to_trade,
+                                                            tradable_times = tradable_times,
+                                                            closing_session_times = closing_session_times,
+                                                            position_sizing_to_trade=None,
+                                                            min_holding_period=min_holding_period,#/int(timeframe[:-1]),
+                                                            max_holding_period=max_holding_period,#/int(timeframe[:-1]),
+                                                            sig_lag=sig_lag,
+                                                            fee=fee,
+                                                            slippage=slippage,
+                                                            long_equity = long_equity,
+                                                            short_equity = short_equity,
+                                                            long_notional=long_notional,
+                                                            short_notional=short_notional,
+                                                            signals=signals_to_trade, 
+                                                            signal_function=signal_function2, 
+                                                            figsize=figsize, # width, height
+                                                            show_B=True,
+                                                            show_LS=True,
+                                                            title=title,
+                                                            file_name=file_name,
+                                                            plots=True,
+                                                            diagnostics_verbose=False,
+                                                            trail_SL = None,
+                                                            trail_TP = None,
+                                                            trail_increment = None,
+                                                            N=365*24
+                                                            )
+        # =======================
+        # Mutate new tide strategy
+        # =======================
+        # has to have muateted something necessary for survival or remove unnecessary traits
+        # 1. mutate the tide by adding a new window
+        # 2. mutate the TP by adding a new window
+        # 3. mutate the SL by adding a new window
 
-        if mutate_signals_w_TP:
+        if mutate_signals_w_TP and run_signals_w_TP:
                 print(f"\n{'='*30}\n(3) MUTATING SIGNALS USING TP and run strat again\n{'='*30}\n")
 
                 # 1st round of mutated backtest
-                dfmtzTP = indicators.calc_sig_strengths(df_backtested, 
+                dfmtzTP = indicators.calc_signal_TPSL(df_backtested, 
                                 signal = "sig",
                                 penalty = 1, # this widens the SL so that it is not hit too often
-                                tp_position_dict = {"TP1": {"long":{"lookback":3, "qtl": 0.3}, 
-                                                        "short": {"lookback":3, "qtl":0.3}
+                                tp_position_dict = {"TP1": {"long":{"lookback":6, "qtl": 0.1}, 
+                                                        "short": {"lookback":6, "qtl":0.1}
                                                         },
-                                                "TP2": {"long":{"lookback":6, "qtl": 0.6}, 
-                                                        "short": {"lookback":6, "qtl":0.6}
+                                                "TP2": {"long":{"lookback":9, "qtl": 0.2}, 
+                                                        "short": {"lookback":9, "qtl":0.2}
                                                         },
-                                                "TP3": {"long":{"lookback":9, "qtl": 0.9}, 
-                                                        "short": {"lookback":9, "qtl":0.9}
+                                                "TP3": {"long":{"lookback":12, "qtl": 0.3}, 
+                                                        "short": {"lookback":12, "qtl":0.3}
                                                         }
                                                 }
                                 )
@@ -374,10 +374,8 @@ def objective_function(df=None,
                 # END PRINTS ======================================================================================================
 
                 
-                return df_backtested, df_trades, df_summary
-
-        else:
-                return df_backtested, df_trades, df_summary
+ 
+        return df_backtested, df_trades, df_summary
 
 def mutate_signals(df,sig_to_mutate, debug_verbose = True):
     sig = sig_to_mutate
