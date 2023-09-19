@@ -955,11 +955,14 @@ def calc_signal_TPSL(df0,
 
     # print(df["S_positions"])
     # create a column to track the change in tide
-    df[f'S_change'] = df["S_positions"].diff().ne(0).cumsum() # would this be forward looking? ans: yes it is forward looking. qns: why? ans: 
-    df[f'L_change'] = df["L_positions"].diff().ne(0).cumsum()
+
+
+    df[f'{signal}_L_dur'] = df.groupby(df['L_id']).cumcount()
+    df[f'{signal}_L_dur'] = np.where(df['L_id'].isna(), np.nan, df[f'{signal}_L_dur'])
+
     # create a column to count the duration of each tide
-    df[f'{signal}_S_dur'] = df.groupby(f'S_change').cumcount() +1
-    df[f'{signal}_L_dur'] = df.groupby(f'L_change').cumcount() +1
+    df[f'{signal}_S_dur'] = df.groupby(df['S_id']).cumcount()
+    df[f'{signal}_S_dur'] = np.where(df['S_id'].isna(), np.nan, df[f'{signal}_S_dur'])
     # calculate percentile for tide_dur
     # df[f'{signal}_short_dur'] = df[f'{signal}_short_dur'].shift(1)
     # df[f'{signal}_long_dur'] = df[f'{signal}_long_dur'].shift(1)
@@ -1001,7 +1004,6 @@ def calc_signal_TPSL(df0,
             df[f"{signal}_{position}_{tp}_weakness"]=df[f"{signal}_{position}_{tp}_weakness"].fillna(method="ffill")
 
             df[f"{signal}_{position}_{tp}_strength_t"] = df[f"{signal}_{position}_strength_t"].dropna().rolling(lookback).quantile(qtl)#-1
-            # print(df[f"{signal}_{position}_{tp}_strength_t"])
             df[f"{signal}_{position}_{tp}_strength_t"]=df[f"{signal}_{position}_{tp}_strength_t"].fillna(method="ffill")
 
             df[f"{signal}_{position}_{tp}_weakness_t"] = df[f"{signal}_{position}_weakness_t"].dropna().rolling(lookback).quantile(1-qtl)#-1
