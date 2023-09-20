@@ -985,7 +985,7 @@ def calc_signal_TPSL(df0,
     # df["tide_long_str"] = np.where(df["tide"] < 0, df["L_pnl"], np.nan)
 
     # ALERT: tide_long_this should look at str_window amounts of tide-strengths, not str_window number of time periods
-    # df["tide_short_z"] = calc_rolling_sr(df["tide_short_str"].dropna().values, window=str_window)
+    # df["tide_short_z"] = calc_rolling_sr(df["tide_short_str"].dropna().values, window=str_window) 
     # df["tide_long_z"] = calc_rolling_sr(df["tide_long_str"].dropna().values, window=str_window)
 
     for tp in ["TP1", "TP2", "TP3"]:
