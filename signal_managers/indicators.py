@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import numba as nb
-from tqdm import tqdm
+# from tqdm import tqdm
 
 from utils.find_index import find_list_index
 from utils.list_type_converter import convert_to_type,convert_to_array
@@ -342,7 +342,7 @@ def param_func_mfi(x, i, col_index = None):
     Template for dynamic parameters function
     where x is a np_array of cols + dynamic_param_col
     """
-    windows = [14]
+    windows = [24]
 
     return convert_to_array(windows)
     
@@ -357,7 +357,7 @@ def calc_mfi_sig(df0,
    
     df = df0.copy() # if somehow need to save initial state of df before adding signals
     df["date_time"] = df.index
-    for cols in tqdm(cols_set):
+    for cols in cols_set:
         if dynamic_param_col is not None:
             col_names = ['date_time']+cols+dynamic_param_col
             col_index = find_list_index(col_names, dynamic_param_col)
@@ -409,16 +409,10 @@ def rolling_sum(heights, w=4):
 
 
 # @nb.njit(cache=True)
-def calc_exponential_height(heights, w):  ## CHECK!!
-    # heights = OHLCVT_array[:,1]-OHLCVT_array[:,2]
+def calc_exponential_height(heights, w):  
     rolling_sum_H_L = rolling_sum(heights, w)
-    # rolling_sum_H_L = np.full(len(heights),np.nan)
-    # for idx in range(window-1,len(heights)):
-    #     # print(f"summing {start_idx} to {idx}")
-    #     rolling_sum_H_L[idx] = np.sum(heights[idx-window+1:idx])
-    # mpbw=(heights.rolling(window=w).sum())
     exp_height = (rolling_sum_H_L[-1] - heights[-w] + heights[-1]) / w
-    return exp_height  # (mpbw.iloc[-1]-heights[-w]+heights[-1])/w
+    return exp_height 
 
 
 # @nb.njit(cache=True)
@@ -432,18 +426,15 @@ def calc_tide(open_i: np.array,
               thresholds: int,
               sensitivity: float) -> np.array:
     
-
     new_open = open_i[-1]
     new_high = high_i[-1]
     new_low = low_i[-1]
-    # print(f"new_open: {new_open}, new_high: {new_high}, new_low: {new_low}")    
+
     if np.isnan(previous_tide):
         previous_tide = 1
     if np.isnan(previous_ebb):
         previous_ebb = new_open
 
-    # undertow = [[1 if new_open > previous_ebb else 0] if previous_tide == 0 else [1 if new_open < previous_ebb else 0]][0][0]
-    " undertow "
     if previous_tide:
         if new_open < previous_ebb:
             undertow = 1
@@ -455,8 +446,6 @@ def calc_tide(open_i: np.array,
         else:
             undertow = 0
 
-    # surftow = [[1 if new_high > previous_ebb else 0] if previous_tide == 0 else [1 if new_low < previous_ebb else 0]][0][0]
-    " surftow "
     if previous_tide:
         if new_low < previous_ebb:
             surftow = 1
@@ -468,23 +457,16 @@ def calc_tide(open_i: np.array,
         else:
             surftow = 0
 
-    " Calculate change in tide: flow"
-
-    # heights = df["high_i"][-67:]-df["low_i"][-67:]
     heights = high_i - low_i
     heights = heights[-max(windows):]
 
     w_0 = 0
     for w in windows:
         w_i = calc_exponential_height(heights, w)
-        # print(f"w_0: {w_0}, w_i: {w_i}, w: {w}: heights: {heights}")
         if w_i > w_0:
             max_exp_height = w_i
             w_0 = w_i
-        # print(max_exp_height)
-    # max_exp_height=max([calc_exponential_height(heights,w) for w in windows])#calc_exponential_height(prices,lengths[0]),calc_exponential_height(prices,lengths[1]),calc_exponential_height(prices,lengths[2]))    #THIS CAN BE CHANGED TO separate rolling functions#
 
-    # sensitivity=sensitivity/100
     max_exp_height_ranges = list(np.quantile(heights, np.linspace(0, 1, thresholds)))
     max_exp_height_ranges = [0] + max_exp_height_ranges + [np.inf]
     additives_range = np.linspace(0, np.quantile(heights, sensitivity), len(max_exp_height_ranges) + 1)
@@ -498,21 +480,16 @@ def calc_tide(open_i: np.array,
         else:
             i += 1
 
-    " flow "
-    # flow = [previous_ebb+additive if previous_tide == 1 else previous_ebb-additive][0]
     if previous_tide:
         flow = previous_ebb + additive
     else:
         flow = previous_ebb - additive
 
-    " interim tides "
-    # tide_1 = [1 if new_open >= flow else 0][0]
     if new_open >= flow:
         tide_1 = 1
     else:
         tide_1 = 0
 
-    # tide_2 = [[1 if new_low < previous_ebb else 0] if tide_1 == 1 else [1 if new_high > previous_ebb else 0]][0][0]
     if tide_1:
         if new_low < previous_ebb:
             tide_2 = 1
@@ -524,7 +501,6 @@ def calc_tide(open_i: np.array,
         else:
             tide_2 = 0
 
-    # tide_3 =[[1 if surftow == 1 else 0] if tide_2 ==1 else [[ 0 if undertow == 1 else 1] if surftow == 0 else 0]][0][0]
     if tide_2:
         if surftow:
             tide_3 = 1
@@ -539,7 +515,6 @@ def calc_tide(open_i: np.array,
         else:
             tide_3 = 0
 
-    # tide_4 = [[1 if new_low>=flow else 0] if tide_1 == 1 else [1 if new_high > flow else 0]][0][0]
     if tide_1:
         if new_low >= flow:
             tide_4 = 1
@@ -551,13 +526,23 @@ def calc_tide(open_i: np.array,
         else:
             tide_4 = 0
 
-    " tide formulation "
-    if tide_1 == 1 and tide_4 == 1:
-        new_tide = 1
-    elif tide_1 == 0 and tide_4 == 0:
-        new_tide = 0
-    else:
-        new_tide = previous_tide
+    # " tide formulation "
+    # if tide_1 == 1 and tide_4 == 1:
+    #     new_tide = 1
+    # elif tide_1 == 0 and tide_4 == 0:
+    #     new_tide = 0
+    # else:
+    #     new_tide = previous_tide
+    # " tide formulation "
+    # if tide_1 == 1 and tide_4 == 1:
+    #     new_tide = 1
+    # elif tide_1 == 0 and tide_4 == 0:
+    #     new_tide = -1
+    # else:
+    #     new_tide = 0
+    
+    weights = [0.25, 0.25, 0.25, 0.25] # example weights
+    new_tide = (tide_1 * weights[0] + tide_2 * weights[1] + tide_3 * weights[2] + tide_4 * weights[3]) * 20 - 10
 
     " ebb Formulation "
     if tide_3 == 1:
@@ -647,8 +632,6 @@ def rolling_tide(np_col,
                                                     sensitivity=sensitivity) # to be generalised next
                 except Exception as e:
                     raise Exception(f"i: {i}, np_col = {np_col[:,1]}\nerror: {e}\n\n")
-                    # tide_i, ebb_i, flow_i = np.nan, np.nan, np.nan
-                # print(f"t:{t} w:{w} th:{th} ---> windows={windows}, threshold={threshold}, sensitivity={sensitivities[0]}")
                 
                 tide_i_np[th, w] = tide_i
                 ebb_i_np[th, w] = ebb_i
@@ -740,7 +723,7 @@ def calc_tide_sig(df0,
     # print(df0.head(20))
     df = df0.copy() # if somehow need to save initial state of df before adding signals
     df["date_time"] = df.index  
-    for cols in tqdm(cols_set):
+    for cols in cols_set:
         df[cols] = df[cols].copy().fillna(method='ffill')
         if dynamic_param_col is not None:
             col_names = ['date_time']+cols+dynamic_param_col
@@ -849,7 +832,7 @@ def rolling_zscore(np_col,
     sigs_list = [sigs_i]*max_lookback
 
     # print(f"len(np_col): {len(np_col)}")
-    for i in tqdm(range(max_lookback,n+1)):
+    for i in range(max_lookback,n+1):
         windows, thresholds = param_func_Z(np_col, i, col_index)
         # print(f"i: {i}, windows: {windows}")
         sigs_i = np.full((len(windows), len(thresholds)), np.nan)
@@ -880,7 +863,7 @@ def calc_z_sig(df0,
              sig_name_1 = "z",
              sig_name_2 = "sig",
              dynamic_param_col=None,
-             dynamic_param_combine = True):
+             dynamic_param_combine=True):
     """
     Financial meaning behind parameters
     window_func: can lambda x, i:288 even work as a parameter? wouldnt the function confuse i to be a parameter? ans: yes it works. but why? ans: because the function is not called here. it is only defined here. it is called in the rolling_zscore function.
@@ -911,7 +894,7 @@ def calc_z_sig(df0,
     """
     df = df0.copy() # if somehow need to save initial state of df before adding signals
     df["date_time"] = df.index
-    for col in tqdm(cols_set):
+    for col in cols_set:
         # print(f"col: {col}")
         if dynamic_param_col is not None:
             df[col] = df[col].copy().fillna(method='ffill')
@@ -954,17 +937,17 @@ def calc_z_sig(df0,
     return df1
 
 
-def calc_sig_strengths(df0, 
+def calc_signal_TPSL(df0, 
                         signal = "sig",
                         penalty = 1, # this widens the SL so that it is not hit too often
-                        tp_position_dict = {"TP1": {"long":{"lookback":3, "qtl": 0.3}, 
-                                                    "short": {"lookback":3, "qtl":0.3}
+                        tp_position_dict = {"TP1": {"L":{"lookback":3, "qtl": 0.3}, 
+                                                    "S": {"lookback":3, "qtl":0.3}
                                                     },
-                                            "TP2": {"long":{"lookback":6, "qtl": 0.66}, 
-                                                    "short": {"lookback":6, "qtl":0.66}
+                                            "TP2": {"L":{"lookback":6, "qtl": 0.6}, 
+                                                    "S": {"lookback":6, "qtl":0.6}
                                                     },
-                                            "TP3": {"long":{"lookback":9, "qtl": 0.99}, 
-                                                    "short": {"lookback":9, "qtl":0.99}
+                                            "TP3": {"L":{"lookback":9, "qtl": 0.9}, 
+                                                    "S": {"lookback":9, "qtl":0.9}
                                                     }
                                             }
                         ):
@@ -972,39 +955,41 @@ def calc_sig_strengths(df0,
 
     # print(df["S_positions"])
     # create a column to track the change in tide
-    df[f'short_change'] = df["S_positions"].diff().ne(0).cumsum()
-    df[f'long_change'] = df["L_positions"].diff().ne(0).cumsum()
+
+
+    df[f'{signal}_L_dur'] = df.groupby(df['L_id']).cumcount()
+    df[f'{signal}_L_dur'] = np.where(df['L_id'].isna(), np.nan, df[f'{signal}_L_dur'])
+
     # create a column to count the duration of each tide
-    df[f'{signal}_short_dur'] = df.groupby(f'short_change').cumcount() +1
-    df[f'{signal}_long_dur'] = df.groupby(f'long_change').cumcount() +1
+    df[f'{signal}_S_dur'] = df.groupby(df['S_id']).cumcount()
+    df[f'{signal}_S_dur'] = np.where(df['S_id'].isna(), np.nan, df[f'{signal}_S_dur'])
     # calculate percentile for tide_dur
-    df[f'{signal}_short_dur'] = df[f'{signal}_short_dur'].shift(1)
-    df[f'{signal}_long_dur'] = df[f'{signal}_long_dur'].shift(1)
+    # df[f'{signal}_short_dur'] = df[f'{signal}_short_dur'].shift(1)
+    # df[f'{signal}_long_dur'] = df[f'{signal}_long_dur'].shift(1)
 
     # df.drop(columns=[f'short_change'], inplace=True)
     # df.drop(columns=[f'long_change'], inplace=True)
+    df[f"{signal}_S_strength_t"] = np.where((df["S_rpnl"]>0), df[f'{signal}_S_dur'], np.nan)
+    df[f"{signal}_S_weakness_t"] = np.where((df["S_rpnl"]<0), df[f'{signal}_S_dur'], np.nan)
 
-    df[f"{signal}_short_strength_t"] = np.where((df["S_rpnl"]>0), df[f'{signal}_short_dur'], np.nan)
-    df[f"{signal}_short_weakness_t"] = np.where((df["S_rpnl"]<0), df[f'{signal}_short_dur'], np.nan)
-
-    df[f"{signal}_long_strength_t"] = np.where((df["L_rpnl"]>0), df[f'{signal}_long_dur'], np.nan)
-    df[f"{signal}_long_weakness_t"] = np.where((df["L_rpnl"]<0), df[f'{signal}_long_dur'], np.nan)
+    df[f"{signal}_L_strength_t"] = np.where((df["L_rpnl"]>0), df[f'{signal}_L_dur'], np.nan)
+    df[f"{signal}_L_weakness_t"] = np.where((df["L_rpnl"]<0), df[f'{signal}_L_dur'], np.nan)
 
     # could have for multiple tide speeds, fast or slow
-    df[f"{signal}_short_strength"] = np.where((df["S_rpnl"]>0), df["S_rpnl"], np.nan)
-    df[f"{signal}_short_weakness"] = np.where((df["S_rpnl"]<0), df["S_rpnl"], np.nan)
+    df[f"{signal}_S_strength"] = np.where((df["S_rpnl"]>0), df["S_rpnl"]/df["S_qty"], np.nan)
+    df[f"{signal}_S_weakness"] = np.where((df["S_rpnl"]<0), df["S_rpnl"]/df["S_qty"], np.nan)
 
-    df[f"{signal}_long_strength"] = np.where((df["L_rpnl"]>0), df["L_rpnl"], np.nan)
-    df[f"{signal}_long_weakness"] = np.where((df["L_rpnl"]<0), df["L_rpnl"], np.nan)
+    df[f"{signal}_L_strength"] = np.where((df["L_rpnl"]>0), df["L_rpnl"]/df["L_qty"], np.nan)
+    df[f"{signal}_L_weakness"] = np.where((df["L_rpnl"]<0), df["L_rpnl"]/df["L_qty"], np.nan)
     # df["tide_short_str"] = np.where(df["tide"] > 0, df["S_pnl"], np.nan)
     # df["tide_long_str"] = np.where(df["tide"] < 0, df["L_pnl"], np.nan)
 
     # ALERT: tide_long_this should look at str_window amounts of tide-strengths, not str_window number of time periods
-    # df["tide_short_z"] = calc_rolling_sr(df["tide_short_str"].dropna().values, window=str_window)
+    # df["tide_short_z"] = calc_rolling_sr(df["tide_short_str"].dropna().values, window=str_window) 
     # df["tide_long_z"] = calc_rolling_sr(df["tide_long_str"].dropna().values, window=str_window)
 
     for tp in ["TP1", "TP2", "TP3"]:
-        for position in ["long", "short"]:
+        for position in ["L", "S"]:
             # print(f"{tp} --> {position}")
             try:
                 lookback = tp_position_dict[tp][position]["lookback"]
@@ -1024,14 +1009,14 @@ def calc_sig_strengths(df0,
             df[f"{signal}_{position}_{tp}_weakness_t"] = df[f"{signal}_{position}_weakness_t"].dropna().rolling(lookback).quantile(1-qtl)#-1
             df[f"{signal}_{position}_{tp}_weakness_t"]= df[f"{signal}_{position}_{tp}_weakness_t"].fillna(method="ffill")
 
-            if position == "long":
+            if position == "L":
                 x = 1 
-            elif position == "short":
+            elif position == "S":
                 x = -1
 
             # PRICE TP and SL
             df[f"{signal}_{position}_{tp}"] = df["close"] +x*df[f"{signal}_{position}_{tp}_strength"] 
-            df[f"{signal}_{position}_SL{tp[-1]}"] = df["close"] - penalty*abs(df[f"{signal}_{position}_{tp}_weakness"])
+            df[f"{signal}_{position}_SL{tp[-1]}"] = df["close"] -x*penalty*abs(df[f"{signal}_{position}_{tp}_weakness"])
 
             # TIME TP AND SL
             df[f"{signal}_{position}_{tp}_t"] = df[f"{signal}_{position}_{tp}_strength_t"] 
@@ -1040,9 +1025,9 @@ def calc_sig_strengths(df0,
             # df[f"tide_{position}_{tp}"]=df[f"tide_{position}_{tp}"].fillna(method="ffill")
 
             # Risk reward ratio
-            df[f"{signal}_{position}_RRRatio{tp[-1]}"] = abs(df["close"]-df[f"{signal}_{position}_SL{tp[-1]}"])/abs(df["close"] - df[f"{signal}_{position}_{tp}"])
-            df[f"{signal}_{position}_ub_RRRatio{tp[-1]}"] = df[f"{signal}_{position}_RRRatio{tp[-1]}"].dropna().rolling(lookback).quantile(qtl)#-1
-            df[f"{signal}_{position}_lb_RRRatio{tp[-1]}"] = df[f"{signal}_{position}_RRRatio{tp[-1]}"].dropna().rolling(lookback).quantile(1-qtl)#-1
+            df[f"{signal}_{position}_RR{tp[-1]}"] = abs(df["close"]-df[f"{signal}_{position}_SL{tp[-1]}"]) / abs(df["close"] - df[f"{signal}_{position}_{tp}"])
+            # df[f"{signal}_{position}_ub_RR{tp[-1]}"] = df[f"{signal}_{position}_RRRatio{tp[-1]}"].dropna().rolling(lookback).quantile(qtl)#-1
+            # df[f"{signal}_{position}_lb_RR{tp[-1]}"] = df[f"{signal}_{position}_RRRatio{tp[-1]}"].dropna().rolling(lookback).quantile(1-qtl)#-1
 
     return df
 # ============================================================================================================================================
@@ -1271,7 +1256,7 @@ def calc_ewmac_sig(df0,
              ewmac_alpha_func = lambda x: 2 * x,
              sig_name = "ewmac"):
     df = df0.copy() # if somehow need to save initial state of df before adding signals
-    for col in tqdm(cols):
+    for col in cols:
         # print(f"col: {col}")
         np_col = df[col].values
         # print(f"len np_col: {len(np_col)}")

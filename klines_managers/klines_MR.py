@@ -1,3 +1,5 @@
+#%%
+
 from data_manager import klines_TV, klines_ccxt, klines_polygon
 import time
 
@@ -65,7 +67,7 @@ class KlinesManagerMR:
 #%%
 if __name__ == "__main__":
     
-    instruments_ccxt_list = ["ccxt_kucoin__ETH-USDT", "ccxt_kucoin__BTC-USDT"]
+    instruments_ccxt_list = ["polygon__EC:USDSGD"]
     limit_ccxt = 1000
     
     
@@ -78,7 +80,3 @@ if __name__ == "__main__":
     
     
     
-    #%%
-    
-    import ccxt
-    client = ccxt.kucoin()
