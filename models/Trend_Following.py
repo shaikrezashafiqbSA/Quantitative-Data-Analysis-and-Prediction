@@ -283,17 +283,28 @@ def get_z_sig(i,np_closePx, signals_dict, sig_lag=0, position="long",side="buy",
     sig_lagged = i -sig_lag
     if sig_lagged >= i-1:
         sig_lagged = i
+    # if position == "long":        
+    #     if side == "buy": 
+    #         signal = signals_dict["sig_tide"][sig_lagged] >=L_buy
+    #     elif side == "sell":
+    #         signal = signals_dict["sig_tide"][sig_lagged] <L_sell
+            
+    # elif position == "short":
+    #     if side == "buy": 
+    #         signal = signals_dict["sig_tide"][sig_lagged] <= S_buy
+    #     elif side == "sell":
+    #         signal = signals_dict["sig_tide"][sig_lagged] > S_sell
     if position == "long":        
         if side == "buy": 
-            signal = signals_dict["sig_tide"][sig_lagged] >=L_buy
+            signal = signals_dict["sig_tide"][sig_lagged] <= L_buy
         elif side == "sell":
-            signal = signals_dict["sig_tide"][sig_lagged] <L_sell
+            signal = signals_dict["sig_tide"][sig_lagged] > L_sell
             
     elif position == "short":
         if side == "buy": 
-            signal = signals_dict["sig_tide"][sig_lagged] <= S_buy
+            signal = signals_dict["sig_tide"][sig_lagged] >= S_buy
         elif side == "sell":
-            signal = signals_dict["sig_tide"][sig_lagged] > S_sell
+            signal = signals_dict["sig_tide"][sig_lagged] < S_sell
 
     return signal
 
@@ -311,15 +322,14 @@ def get_z_sig_TP(i,np_closePx, signals_dict, sig_lag=0, position="long",side="bu
         sig_lagged = i
     
     if position == "long":
-        profitable_RR = signals_dict[f"sig_L_RR1"][i] < 1 # Risk > reward disproportionately. 
+        profitable_RR = signals_dict[f"sig_S_RR1"][i] < 1 # Risk > reward disproportionately. 
             
         if side == "buy": 
             time_since_trade_int = i - long_closeIdx
         
-            sig_change = signals_dict["sig_tide"][sig_lagged] >=L_buy
-            profitable_RR = signals_dict[f"sig_L_RR1"][i] >= 1 # Risk > reward disproportionately. 
+            sig_change = signals_dict["sig_tide"][sig_lagged] <=L_buy
             # macro_tide_change = (signals_dict["Y"][i] > 0 and signals_dict["Y"][i-1] < 0)
-            signal = sig_change# and time_since_trade_int > profitable_RR*signals_dict["sig_short_SL3_t"][i]
+            signal = sig_change and profitable_RR 
 
         elif side == "sell":
             entry_i = kwargs.get("entry_i",None)
@@ -336,12 +346,12 @@ def get_z_sig_TP(i,np_closePx, signals_dict, sig_lag=0, position="long",side="bu
             SL2_t_hit = signals_dict["sig_L_SL2_t"][i] > time_in_trade_int
 
             TP3_hit = (np_closePx[i] > signals_dict["sig_L_TP3"][i-1]) and (np_closePx[i-1] < signals_dict["sig_L_TP3"][i-2])
-            SL3_hit = (np_closePx[i] < signals_dict["sig_L_SL3"][i-1]) and (np_closePx[i-1] > signals_dict["sig_long_SL3"][i-2]) 
+            SL3_hit = (np_closePx[i] < signals_dict["sig_L_SL3"][i-1]) and (np_closePx[i-1] > signals_dict["sig_L_SL3"][i-2]) 
             TP3_t_hit = signals_dict["sig_L_TP3_t"][i] > time_in_trade_int
             SL3_t_hit = signals_dict["sig_L_SL3_t"][i] > time_in_trade_int
 
 
-            sig_change = signals_dict["sig_tide"][sig_lagged] <L_sell
+            sig_change = signals_dict["sig_tide"][sig_lagged] > L_sell
 
             # SL1_exit = SL1_hit and signals_dict["sig_long_SL1_t"][i]
             # signal = sig_change and profitable_RR
@@ -350,18 +360,19 @@ def get_z_sig_TP(i,np_closePx, signals_dict, sig_lag=0, position="long",side="bu
             TPs_t_hit = profitable_RR or (TP1_t_hit or TP2_t_hit or TP3_t_hit)
             SLs_hit = not profitable_RR or (SL1_hit or SL2_hit or SL3_hit)
             SLs_t_hit = not profitable_RR or (SL1_t_hit or SL2_t_hit or SL3_t_hit)
-            signal = TPs_hit or TPs_t_hit or SLs_hit or SLs_t_hit   
+            # signal = TPs_hit or TPs_t_hit or SLs_hit or SLs_t_hit   
+            signal = TPs_hit or SLs_hit   
         
     elif position == "short":
-        profitable_RR = signals_dict[f"sig_S_RR1"][i] >= 1 # Risk > reward disproportionately. 
+        profitable_RR = signals_dict[f"sig_L_RR1"][i] < 1 # Risk > reward disproportionately. 
     
         if side == "buy": 
             time_since_trade_int = i - short_closeIdx
         
-            sig_change = signals_dict["sig_tide"][sig_lagged] <= S_buy
-            profitable_RR = signals_dict[f"sig_S_RR1"][i] > 1 # Risk > reward disproportionately. 
+            sig_change = signals_dict["sig_tide"][sig_lagged] >= S_buy
+
             # macro_tide_change = (signals_dict["Y"][i] < 0 and signals_dict["Y"][i-1] > 0)
-            signal = sig_change# and time_since_trade_int > profitable_RR*signals_dict["sig_long_SL3_t"][i]
+            signal = sig_change and profitable_RR # and time_since_trade_int > profitable_RR*signals_dict["sig_long_SL3_t"][i]
 
         elif side == "sell":
             entry_i = kwargs.get("entry_i",None)
@@ -382,7 +393,7 @@ def get_z_sig_TP(i,np_closePx, signals_dict, sig_lag=0, position="long",side="bu
             TP3_t_hit = signals_dict["sig_S_TP3_t"][i] > time_in_trade_int
             SL3_t_hit = signals_dict["sig_S_SL3_t"][i] > time_in_trade_int
 
-            sig_change = signals_dict["sig_tide"][sig_lagged] > S_sell
+            sig_change = signals_dict["sig_tide"][sig_lagged] < S_sell
             
             # SL1_exit = SL1_hit and signals_dict["sig_long_SL1_t"][i]
             # signal = sig_change and profitable_RR 
@@ -391,8 +402,8 @@ def get_z_sig_TP(i,np_closePx, signals_dict, sig_lag=0, position="long",side="bu
             TPs_t_hit = profitable_RR or (TP1_t_hit or TP2_t_hit or TP3_t_hit)
             SLs_hit = not profitable_RR or (SL1_hit or SL2_hit or SL3_hit)
             SLs_t_hit = not profitable_RR or (SL1_t_hit or SL2_t_hit or SL3_t_hit)
-            signal = TPs_hit or TPs_t_hit or SLs_hit or SLs_t_hit   
-
+            # signal = TPs_hit or TPs_t_hit or SLs_hit or SLs_t_hit   
+            signal = TPs_hit or SLs_hit   
     return signal
 
 

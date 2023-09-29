@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import time
+from datetime import datetime
 
 from polygon import RESTClient
 from utils import pickle_helper
@@ -29,7 +30,7 @@ def milliseconds_to_datestring(milliseconds):
 class KlinesManagerPolygon:
     def __init__(self, 
                  api_key,
-                 database_path = "./database/polygon/"):
+                 database_path = "./database/klines/polygon/"):
         self.client = RESTClient(api_key=api_key)
         self.database_path = database_path
 
@@ -130,6 +131,7 @@ class KlinesManagerPolygon:
                     instruments, 
                     timeframes,
                     since = "2023-01-01 00:00:00",
+                    update=False,
                     until = None,
                     limit = 5000,
                     max_retries=100,
@@ -153,17 +155,13 @@ class KlinesManagerPolygon:
                 t0 = time.time()
                 try:
                     df_old = pickle_helper.pickle_this(data=None, pickle_name=f"{instrument}_{timeframe}",path=self.database_path)
+                    if not update:
+                        temp[timeframe] = df_old
+                        break
                     t1 = np.round(time.time() - t0,2)
                     df_old_end_datetime = df_old.index[-1].strftime("%Y-%m-%d %H:%M:%S")
                     df_old_start_datetime = df_old.index[0].strftime("%Y-%m-%d %H:%M:%S")
-                    from datetime import datetime
-
-                    date1 = datetime.strptime(since, '%Y-%m-%d %H:%M:%S')
-                    date2 = datetime.strptime(df_old_start_datetime, '%Y-%m-%d %H:%M:%S')
-
-                    difference = date2 - date1
-
-                    if difference > 30:
+                    if since < df_old_start_datetime:
                         if verbose: print(f"Requested ({since}) < available ({df_old_start_datetime}) ---> Querying from {since}")
                         new_since = since
                     else:
@@ -172,7 +170,7 @@ class KlinesManagerPolygon:
                     if verbose: print(f"--> in database ({len(df_old)} rows): {df_old.index[0]} ===> {new_since} ({t1}s)") 
                     
                 except Exception as e:
-                    print(e)
+                    print(f"{e}\n {symbol} does not exist in database")
                     df_old=None 
                     new_since = since
                 

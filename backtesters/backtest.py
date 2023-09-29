@@ -489,7 +489,8 @@ def backtest(model_name,
               klines_tradable = "tradable",
               volume_to_trade = "5m_volume",
               tradable_times = [('02:45', '05:25'),('07:15', '09:50')],
-              closing_session_times = [('05:20', '05:30'),('09:40', '09:50')],
+              days_of_the_week_to_trade = [0,1,2,3,4], # 0 is Monday, 6 is Sunday
+            #   closing_session_times = [('05:20', '05:30'),('09:40', '09:50')],
               position_sizing_to_trade = None,
               fee=0.0007,
               slippage = 0.0003, # 1bps for slippage
@@ -536,24 +537,30 @@ def backtest(model_name,
     # =============================================================================
     # TRADING TIMES AND SESSION CLOSING FLAGS
     # =============================================================================
-    # [02:45","05:25"] and ["07:15","09:50"]
-    # print(f"tradable_times: {tradable_times}, closing_session_times: {closing_session_times}")
-    if (tradable_times is None) and (closing_session_times is None):
+    # Convert days of the week to trade into a set for faster lookup
+    days_of_the_week_to_trade = set(days_of_the_week_to_trade)
+
+    if (tradable_times is None):
         df["tradable"] = True
         df["session_closing"] = False
     else:
-        assert len(tradable_times) == len(closing_session_times)
         
         trading_times_index = []
-        session_closing_index = []
-        for tradable_time, session_closing_time in zip(tradable_times, closing_session_times):
-            trading_times_index += list(df.between_time(tradable_time[0], tradable_time[1]).index)
-            session_closing_index += list(df.between_time(session_closing_time[0], session_closing_time[1]).index)
+        # session_closing_index = []
+        # for tradable_time, session_closing_time in zip(tradable_times, closing_session_times):
+        for tradable_time in tradable_times:
+            df_filtered = df[df.index.dayofweek.isin(days_of_the_week_to_trade)]
+            # trading_times_index += list(df.between_time(tradable_time[0], tradable_time[1]).index)
+            trading_times_index += list(df_filtered.between_time(tradable_time[0], tradable_time[1]).index)
+            # session_closing_index += list(df.between_time(session_closing_time[0], session_closing_time[1]).index)
         
         # Add flags to main dataframe
         df["tradable"] = df.index.isin(trading_times_index)
-        df["session_closing"] = df.index.isin(session_closing_index)
-            
+        df["tradable"] = df["tradable"].fillna(False).astype(bool)
+        # print(~df["tradable"].shift(-1).tail(24))
+        # df["session_closing"] = df.index.isin(session_closing_index)
+        df['session_closing'] = df['tradable'] & (~df['tradable']).shift(-1)
+        df['session_closing'] = df['session_closing'].fillna(False)
         
     
     # =============================================================================

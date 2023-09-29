@@ -976,11 +976,11 @@ def calc_signal_TPSL(df0,
     df[f"{signal}_L_weakness_t"] = np.where((df["L_rpnl"]<0), df[f'{signal}_L_dur'], np.nan)
 
     # could have for multiple tide speeds, fast or slow
-    df[f"{signal}_S_strength"] = np.where((df["S_rpnl"]>0), df["S_rpnl"], np.nan)
-    df[f"{signal}_S_weakness"] = np.where((df["S_rpnl"]<0), df["S_rpnl"], np.nan)
+    df[f"{signal}_S_strength"] = np.where((df["S_rpnl"]>0), df["S_rpnl"]/df["S_qty"], np.nan)
+    df[f"{signal}_S_weakness"] = np.where((df["S_rpnl"]<0), df["S_rpnl"]/df["S_qty"], np.nan)
 
-    df[f"{signal}_L_strength"] = np.where((df["L_rpnl"]>0), df["L_rpnl"], np.nan)
-    df[f"{signal}_L_weakness"] = np.where((df["L_rpnl"]<0), df["L_rpnl"], np.nan)
+    df[f"{signal}_L_strength"] = np.where((df["L_rpnl"]>0), df["L_rpnl"]/df["L_qty"], np.nan)
+    df[f"{signal}_L_weakness"] = np.where((df["L_rpnl"]<0), df["L_rpnl"]/df["L_qty"], np.nan)
     # df["tide_short_str"] = np.where(df["tide"] > 0, df["S_pnl"], np.nan)
     # df["tide_long_str"] = np.where(df["tide"] < 0, df["L_pnl"], np.nan)
 
@@ -1025,7 +1025,7 @@ def calc_signal_TPSL(df0,
             # df[f"tide_{position}_{tp}"]=df[f"tide_{position}_{tp}"].fillna(method="ffill")
 
             # Risk reward ratio
-            df[f"{signal}_{position}_RR{tp[-1]}"] = abs(df["close"]-x*df[f"{signal}_{position}_SL{tp[-1]}"])/abs(df["close"] - x*df[f"{signal}_{position}_{tp}"])
+            df[f"{signal}_{position}_RR{tp[-1]}"] = abs(df["close"]-df[f"{signal}_{position}_SL{tp[-1]}"]) / abs(df["close"] - df[f"{signal}_{position}_{tp}"])
             # df[f"{signal}_{position}_ub_RR{tp[-1]}"] = df[f"{signal}_{position}_RRRatio{tp[-1]}"].dropna().rolling(lookback).quantile(qtl)#-1
             # df[f"{signal}_{position}_lb_RR{tp[-1]}"] = df[f"{signal}_{position}_RRRatio{tp[-1]}"].dropna().rolling(lookback).quantile(1-qtl)#-1
 
