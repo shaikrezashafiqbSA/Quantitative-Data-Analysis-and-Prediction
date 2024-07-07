@@ -18,25 +18,6 @@ def get_signal(i,np_closePx, signals_dict, sig_lag=0, position="long",side="buy"
     return signal
 
 
-def get_signal_qtl(i,np_closePx, signals_dict, sig_lag=0, position="long",side="buy",entry_i = None)-> bool:
-    
-    # if i < L_q_lookback or i < S_q_lookback:
-    #     return False
-    
-    if position == "long":        
-        if side == "buy": 
-            signal = signals_dict["sig"][i]< signals_dict["L_lq"][i-1]# and signals_dict["sig"][i-1]< signals_dict["L_lq"][i-1]
-        elif side == "sell":
-            signal = signals_dict["sig"][i]> signals_dict["L_uq"][i]
-            
-    elif position == "short":
-        if side == "buy": 
-            signal = signals_dict["sig"][i]> signals_dict["S_uq"][i-1] #and signals_dict["sig"][i-1]> signals_dict["S_lq"][i-1]
-        elif side == "sell":
-            signal = signals_dict["sig"][i]< signals_dict["S_lq"][i]
-
-    return signal
-
 
 def get_signal_default(i, np_closePx, signals_dict,sig_lag=0, position="long",side="buy", **kwargs)-> bool:
     
@@ -80,7 +61,145 @@ def get_signal_Y(i,np_closePx, signals_dict, sig_lag=0, position="long",side="bu
 
     return signal
     
+# =========================================================================================================================================
+#                                                           z signals
+# =========================================================================================================================================
 
+def get_z_sig(i, np_closePx, signals_dict, sig_lag=0, position="long", side="buy", **kwargs)-> bool:
+    L_buy = kwargs.get("L_buy",1)
+    L_sell = kwargs.get("L_sell",1)
+    S_buy = kwargs.get("S_buy",-1)
+    S_sell = kwargs.get("S_sell",-1)
+
+    i_lagged = i - sig_lag
+    if i_lagged < 0: 
+        return False
+    elif i_lagged >= len(np_closePx):
+        return False
+
+    signal = False
+    if position == "long":        
+        if side == "buy": 
+            signal = signals_dict["zscore"][i_lagged] >= L_buy
+        elif side == "sell":
+            signal = signals_dict["zscore"][i_lagged] < L_sell
+            
+    elif position == "short":
+        if side == "buy": 
+            signal = signals_dict["zscore"][i_lagged] <= S_buy
+        elif side == "sell":
+            signal = signals_dict["zscore"][i_lagged] > S_sell
+
+    return signal
+
+
+def get_z_sig_TP(i,np_closePx, signals_dict, sig_lag=0, position="long",side="buy",**kwargs)-> bool:
+    L_buy=kwargs.get("L_buy",1)
+    L_sell=kwargs.get("L_sell",1)
+    S_buy=kwargs.get("S_buy",-1)
+    S_sell=kwargs.get("S_sell",-1)
+
+    long_closeIdx = kwargs.get("long_closeIdx",None)
+    short_closeIdx = kwargs.get("short_closeIdx",None)
+    
+    long_openIdx = kwargs.get("long_closeIdx",None)
+    short_openIdx = kwargs.get("short_closeIdx",None)
+
+    i_lagged = i -sig_lag
+    if i_lagged > i:
+        i_lagged = i
+    elif i_lagged < 0:
+        return False
+    
+    L_buy_signal_change = signals_dict["zscore"][i_lagged] >= L_buy # -1
+    L_buy_profitable_RR = signals_dict["L_RR1"][i_lagged] <= 1
+    L_buy_signal = L_buy_signal_change and L_buy_profitable_RR 
+
+    S_buy_signal_change = signals_dict["zscore"][i_lagged] <= S_buy
+    S_buy_profitable_RR = signals_dict["S_RR1"][i_lagged] <= 1
+    S_buy_signal = S_buy_signal_change and S_buy_profitable_RR 
+    
+    if position == "long":
+        signal = False
+        if side == "buy": 
+            # L_buy_signal_change = signals_dict["zscore"][i_lagged] <= L_buy # -1
+            # L_buy_profitable_RR = signals_dict["L_RR1"][i_lagged] <= 1
+            # L_buy_signal = L_buy_signal_change and L_buy_profitable_RR 
+            
+            signal = L_buy_signal
+        elif side == "sell":
+            signal_change = signals_dict["zscore"][i_lagged] < L_sell
+            profitable_RR = signals_dict["S_RR1"][i_lagged] < 1
+            long_openIdx = kwargs.get("long_openIdx",None)
+
+            TP1_hit = (signals_dict["high"][i] > signals_dict["L_TP1"][long_openIdx]) #and (signals_dict["high"][i-1] < signals_dict["L_TP1"][long_openIdx])
+            TP2_hit = (signals_dict["high"][i] > signals_dict["L_TP2"][long_openIdx]) #and (signals_dict["high"][i-1] < signals_dict["L_TP2"][long_openIdx])
+            TP3_hit = (signals_dict["high"][i] > signals_dict["L_TP3"][long_openIdx]) #and (signals_dict["high"][i-1] < signals_dict["L_TP3"][long_openIdx])
+            SL1_hit = (signals_dict["low"][i] < signals_dict["L_SL1"][long_openIdx]) #and (signals_dict["low"][i-1] > signals_dict["L_SL1"][long_openIdx])
+            SL2_hit = (signals_dict["low"][i] < signals_dict["L_SL2"][long_openIdx]) #and (signals_dict["low"][i-1] > signals_dict["L_SL2"][long_openIdx])
+            SL3_hit = (signals_dict["low"][i] < signals_dict["L_SL3"][long_openIdx]) #and (signals_dict["low"][i-1] > signals_dict["L_SL3"][long_openIdx])
+
+            TP1_hit_t = i-long_openIdx > signals_dict["L_TP1_t"][long_openIdx]
+            TP2_hit_t = i-long_openIdx > signals_dict["L_TP2_t"][long_openIdx]
+            TP3_hit_t = i-long_openIdx > signals_dict["L_TP3_t"][long_openIdx]
+            SL1_hit_t = i-long_openIdx > signals_dict["L_SL1_t"][long_openIdx]
+            SL2_hit_t = i-long_openIdx > signals_dict["L_SL2_t"][long_openIdx]
+            SL3_hit_t = i-long_openIdx > signals_dict["L_SL3_t"][long_openIdx]
+
+            # TPs_hit = (TP1_hit or TP2_hit or TP3_hit) # THIS WORKS
+            # SLs_hit = (SL1_hit or SL2_hit or SL3_hit) # THIS WORKS
+
+            # TPs_hit = (TP1_hit_t or TP2_hit_t or TP3_hit_t) or (TP1_hit or TP2_hit or TP3_hit) 
+            # SLs_hit = (SL1_hit_t or SL2_hit_t or SL3_hit_t) or (SL1_hit or SL2_hit or SL3_hit) 
+            
+            TPs_hit = (TP1_hit_t and TP1_hit) or (TP2_hit_t and TP2_hit) or (TP3_hit_t and TP3_hit) 
+            SLs_hit = (SL1_hit_t and SL1_hit) or (SL2_hit_t and SL2_hit) or (SL3_hit_t and SL3_hit) 
+
+            # signal = (TPs_hit or SLs_hit) and signal_change # THIS WORKS
+            signal = ((TPs_hit or SLs_hit) and signal_change) or S_buy_signal # THIS WORKS
+            # signal = (TPs_hit or SLs_hit) and profitable_RR
+
+    elif position == "short":
+        signal = False
+        if side == "buy": 
+            # S_buy_signal_change = signals_dict["zscore"][i_lagged] >= S_buy
+            # S_buy_profitable_RR = signals_dict["S_RR1"][i_lagged] <= 1
+            # S_buy_signal = S_buy_signal_change and S_buy_profitable_RR 
+
+            signal = S_buy_signal
+        elif side == "sell":
+            signal_change = signals_dict["zscore"][i_lagged] > S_sell
+            profitable_RR = signals_dict["S_RR1"][i_lagged] < 1
+            short_openIdx = kwargs.get("short_openIdx",None)
+
+            TP1_hit = (signals_dict["low"][i] < signals_dict["S_TP1"][short_openIdx]) #and (signals_dict["low"][i-1] > signals_dict["S_TP1"][short_openIdx])
+            TP2_hit = (signals_dict["low"][i] < signals_dict["S_TP2"][short_openIdx]) #and (signals_dict["low"][i-1] > signals_dict["S_TP2"][short_openIdx])
+            TP3_hit = (signals_dict["low"][i] < signals_dict["S_TP3"][short_openIdx]) #and (signals_dict["low"][i-1] > signals_dict["S_TP3"][short_openIdx])
+            SL1_hit = (signals_dict["high"][i] > signals_dict["S_SL1"][short_openIdx]) #and (signals_dict["high"][i-1] < signals_dict["S_SL1"][short_openIdx]) 
+            SL2_hit = (signals_dict["high"][i] > signals_dict["S_SL2"][short_openIdx]) #and (signals_dict["high"][i-1] < signals_dict["S_SL2"][short_openIdx]) 
+            SL3_hit = (signals_dict["high"][i] > signals_dict["S_SL3"][short_openIdx]) #and (signals_dict["high"][i-1] < signals_dict["S_SL3"][short_openIdx]) 
+            
+            TP1_hit_t = i-short_openIdx > signals_dict["S_TP1_t"][short_openIdx]
+            TP2_hit_t = i-short_openIdx > signals_dict["S_TP2_t"][short_openIdx]
+            TP3_hit_t = i-short_openIdx > signals_dict["S_TP3_t"][short_openIdx]
+            SL1_hit_t = i-short_openIdx > signals_dict["S_SL1_t"][short_openIdx]
+            SL2_hit_t = i-short_openIdx > signals_dict["S_SL2_t"][short_openIdx]
+            SL3_hit_t = i-short_openIdx > signals_dict["S_SL3_t"][short_openIdx]
+
+            # TPs_hit = (TP1_hit or TP2_hit or TP3_hit) # THIS WORKS
+            # SLs_hit = (SL1_hit or SL2_hit or SL3_hit) # THIS WORKS
+
+            # TPs_hit = (TP1_hit_t or TP2_hit_t or TP3_hit_t) or (TP1_hit or TP2_hit or TP3_hit) 
+            # SLs_hit = (SL1_hit_t or SL2_hit_t or SL3_hit_t) or (SL1_hit or SL2_hit or SL3_hit) 
+
+            TPs_hit = (TP1_hit_t and TP1_hit) or (TP2_hit_t and TP2_hit) or (TP3_hit_t and TP3_hit) 
+            SLs_hit = (SL1_hit_t and SL1_hit) or (SL2_hit_t and SL2_hit) or (SL3_hit_t and SL3_hit) 
+
+            # signal = (TPs_hit or SLs_hit) and signal_change # THIS WORKS
+            signal = ((TPs_hit or SLs_hit) and signal_change) or L_buy_signal # THIS WORKS
+            # signal = (TPs_hit or SLs_hit) and profitable_RR
+            
+    return signal
 
 
 
@@ -104,10 +223,12 @@ class model:
                 signals_dict[signal] = df[signal].values
                 
     
-        if signal_function is None:
+        if (signal_function is None) or (signal_function == "label"):
             _get_signal = get_signal
-        elif signal_function == "qtl":
-            _get_signal = get_signal_qtl
+        elif signal_function == "z_sig":
+            _get_signal = model.get_z_sig
+        elif signal_function == "z_sig_TP":
+            _get_signal = model.get_z_sig_TP
         elif signal_function == "default":
             _get_signal = get_signal_default
         else:

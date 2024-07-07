@@ -6,106 +6,8 @@ from tqdm import tqdm
 from importlib import import_module
 
 from performance_analytics.metrics import backtest_summary
-from performance_analytics.backtest_plot import backtest_plots, backtest_plots_simplified, backtest_plots_ppt
+from performance_analytics.backtest_plot import backtest_plots_ppt_SR, backtest_plots_simplified, backtest_plots_ppt
 import models
-
-# def get_signal_meta(i,np_closePx, signals_dict,sig_lag=0,position="long",side="buy",entry_i = None)-> bool:
-#     L_uq=0.99
-#     L_lq = 0.5
-#     L_q_lookback = 36
-    
-#     S_uq=0.99
-#     S_lq = 0.5
-#     S_q_lookback = 36
-#     if i < L_q_lookback or i < S_q_lookback:
-#         return False
-
-
-#     if position == "long":        
-#         if side == "buy": 
-#             new_signal = signals_dict["signal"][i]==1 #and signals_dict["signal"][i-1]==-1
-#             signal_stronk = signals_dict["p"][i] >= np.quantile(signals_dict["p"][i-L_q_lookback:i+1],L_uq)
-#             signal = new_signal and signal_stronk
-#         elif side == "sell":
-#             signal_degrade = signals_dict["signal"][i]==1 and signals_dict["p"][i] <= np.quantile(signals_dict["p"][i-L_q_lookback:i+1],L_lq)
-#             # signal_degrade = signals_dict["signal"][i]==1 and signals_dict["p"][i] <= np.quantile(signals_dict["p"][entry_i:i],L_lq)
-#             signal_flip = signals_dict["signal"][i]==-1 and signals_dict["p"][i] >= np.quantile(signals_dict["p"][i-S_q_lookback:i+1],S_uq)
-#             signal = signal_degrade or signal_flip
-            
-#     elif position == "short":
-#         if side == "buy": 
-#             new_signal = signals_dict["signal"][i]==-1 #and signals_dict["signal"][i-1]==1 
-#             signal_stronk = signals_dict["p"][i] >= np.quantile(signals_dict["p"][i-S_q_lookback:i+1],S_uq) 
-#             signal = new_signal and signal_stronk
-#         elif side == "sell":
-#             signal_degrade = signals_dict["signal"][i]==-1 and signals_dict["p"][i] <= np.quantile(signals_dict["p"][i-S_q_lookback:i+1],S_lq)
-#             # signal_degrade = signals_dict["signal"][i]==-1 and signals_dict["p"][i] <= np.quantile(signals_dict["p"][entry_i:i],S_lq)
-#             signal_flip = signals_dict["signal"][i]==1 and signals_dict["p"][i] >= np.quantile(signals_dict["p"][i-L_q_lookback:i+1],L_uq)
-#             signal = signal_degrade or signal_flip
-
-    
-#     return signal
-
-# def get_signal_Y(i,np_closePx, signals_dict, sig_lag=0, position="long",side="buy",entry_i = None)-> bool:
-            
-#     if position == "long":        
-#         if side == "buy": 
-#             signal = signals_dict["Y"][i-sig_lag]> 0
-#         elif side == "sell":
-#             signal = signals_dict["Y"][i-sig_lag]< 0
-            
-#     elif position == "short":
-#         if side == "buy": 
-#             signal = signals_dict["Y"][i-sig_lag]< 0
-#         elif side == "sell":
-#             signal = signals_dict["Y"][i-sig_lag]> 0
-
-#     return signal
-
-
-# def get_signal_p(i,np_closePx, signals_dict, sig_lag=0, position="long",side="buy",entry_i = None)-> bool:
-#     L_q=0.95
-#     L_q_lookback = 96
-    
-#     S_q=0.95
-#     S_q_lookback = 96
-#     if i < L_q_lookback or i < S_q_lookback:
-#         return False         
-#     if position == "long":        
-#         if side == "buy": 
-#             signal = signals_dict["p"][i] >= np.quantile(signals_dict["p"][i-L_q_lookback:i+1],L_q)
-#         elif side == "sell":
-#             signal = signals_dict["p"][i] <= np.quantile(signals_dict["p"][i-L_q_lookback:i+1],1-L_q)
-            
-#     elif position == "short":
-#         if side == "buy": 
-#             signal = (1-signals_dict["p"][i]) <= np.quantile(1-signals_dict["p"][i-S_q_lookback:i+1],S_q) 
-#         elif side == "sell":
-#             signal = (1-signals_dict["p"][i]) >= np.quantile(1-signals_dict["p"][i-S_q_lookback:i+1], 1-S_q)
-
-#     return signal
-
-# def get_signal_pud(i,np_closePx, signals_dict, sig_lag=0, position="long",side="buy",entry_i = None)-> bool:
-#     L_q=0.95
-#     L_q_lookback = 144
-    
-#     S_q=0.95
-#     S_q_lookback = 144
-#     if i < L_q_lookback or i < S_q_lookback:
-#         return False         
-#     if position == "long":        
-#         if side == "buy": 
-#             signal = signals_dict["p_u"][i] >= np.quantile(signals_dict["p_u"][i-L_q_lookback:i+1],L_q)
-#         elif side == "sell":
-#             signal = signals_dict["p_u"][i] < np.quantile(signals_dict["p_u"][i-L_q_lookback:i+1],1-L_q)
-            
-#     elif position == "short":
-#         if side == "buy": 
-#             signal = signals_dict["p_d"][i] >= np.quantile(signals_dict["p_d"][i-S_q_lookback:i+1],S_q) 
-#         elif side == "sell":
-#             signal = signals_dict["p_d"][i] < np.quantile(signals_dict["p_d"][i-S_q_lookback:i+1],1-S_q)
-
-#     return signal
 
 
 def _backtest(model_name,
@@ -130,6 +32,7 @@ def _backtest(model_name,
               trail_TP = 0.0002,
               trail_increment = 0.0001,
               disable_tqdm= True,
+              reduce_only = False,
               **kwargs,
               ):
     if window is None:
@@ -151,14 +54,10 @@ def _backtest(model_name,
     # =============================================================================
     model = import_module(f"models.{model_name}")
     # print(model)
-    if signal_function is None:
+    if (signal_function is None) or (signal_function == "label"):
         _get_signal = model.get_signal
     elif signal_function == "qtl":
         _get_signal = model.get_signal_qtl
-    elif signal_function == "strengths":
-        _get_signal = model.get_signal_strengths
-    elif signal_function == "strength_w_macros":
-        _get_signal = model.get_signal_strengths_w_macros
     elif signal_function == "default":
         _get_signal = model.get_signal_default
     elif signal_function == "tide":
@@ -169,14 +68,6 @@ def _backtest(model_name,
         _get_signal = model.get_z_sig
     elif signal_function == "z_sig_TP":
         _get_signal = model.get_z_sig_TP
-    # elif signal_function == "meta":
-    #     _get_signal = get_signal_meta
-    # elif signal_function == "Y":
-    #     _get_signal = get_signal_Y
-    # elif signal_function == "p":
-    #     _get_signal = get_signal_p
-    # elif signal_function  == "pud":
-    #     _get_signal = get_signal_pud
     else:
         raise Exception(f"{signal_function} ---> is not valid signal function")
         
@@ -202,16 +93,6 @@ def _backtest(model_name,
     np_short_qty = np.full(len(df), np.nan)
     np_short_exit = np.full(len(df), np.nan)
 
-    
-    # TRAILS 
-    # if trail_stop is not None:
-    np_long_trail = np.full(len(df), trail_SL)
-    np_long_trail_comments = np.full(len(df), "")
-    long_ITM = False
-    
-    np_short_trail = np.full(len(df), trail_SL)
-    np_short_trail_comments = np.full(len(df), "")
-    short_ITM = False
         
     # pnl details
     np_pnl = np.full(len(df), np.nan)
@@ -261,8 +142,14 @@ def _backtest(model_name,
         # ---------- #
         # ENTER LONG
         # ---------- #
-        
-        if (not in_long_position) and tradable and not session_closing and long_notional>0:
+        if reduce_only:
+            long_position_available = not in_long_position and not in_short_position
+            short_position_available = not in_short_position and not in_long_position
+        else:
+            long_position_available = not in_long_position
+            short_position_available = not in_short_position
+
+        if long_position_available and tradable and not session_closing and long_notional>0:
             signal = _get_signal(i,np_closePx,signals_dict, sig_lag=sig_lag, position="long",side="buy",long_closeIdx = long_closeIdx, short_closeIdx = short_closeIdx, **kwargs)
             if signal:
                 # Trackers
@@ -282,7 +169,7 @@ def _backtest(model_name,
         # ---------- #
         # ENTER SHORT
         # ---------- #
-        if not in_short_position and tradable and not session_closing and short_notional>0:
+        if short_position_available and tradable and not session_closing and short_notional>0:
             signal = _get_signal(i,np_closePx, signals_dict, sig_lag=sig_lag, position="short",side="buy",short_closeIdx = short_closeIdx, long_closeIdx = long_closeIdx, **kwargs)
             if signal:
                 # Trackers
@@ -307,7 +194,7 @@ def _backtest(model_name,
         # LONG
         # ========== #
         if in_long_position and (i > long_openIdx): 
-            signal = _get_signal(i,np_closePx, signals_dict, sig_lag=sig_lag, position="long",side="sell",entry_i = long_openIdx, **kwargs)
+            signal = _get_signal(i,np_closePx, signals_dict, sig_lag=sig_lag, position="long",side="sell",long_openIdx = long_openIdx, **kwargs)
             
             # ---------- #
             # EXIT LONG
@@ -316,18 +203,8 @@ def _backtest(model_name,
             signal_triggered_flag = (signal and tradable and not session_closing)
             tradable_but_session_closing =  (tradable and session_closing)
             max_holding_period_flag =  (i >= (long_openIdx + max_holding_period))
-            if trail_SL is None:
-                SL_triggered_flag = False
-            else:
-                if long_ITM:
-                    SL_triggered_flag = (np_closePx[i]*(1-slippage) -long_entry_Px)/long_entry_Px < np_long_trail[i-1]
-                    np_long_trail_comments[i] = 1
-                    long_ITM = False
-                else:
-                    SL_triggered_flag = (np_closePx[i]*(1-slippage) -long_entry_Px)/long_entry_Px < trail_SL
-                    np_long_trail_comments[i] = 0
-                    long_ITM = False
-            if min_holding_period_flag and ( signal_triggered_flag or tradable_but_session_closing or SL_triggered_flag) or max_holding_period_flag: 
+
+            if min_holding_period_flag and ( signal_triggered_flag or tradable_but_session_closing) or max_holding_period_flag: 
                 # Trackers
                 long_closeIdx = i
                 np_long_positions[i] = 0
@@ -366,21 +243,13 @@ def _backtest(model_name,
                 np_long_qty[i] = np_long_qty[i-1]
                 np_long_pnl[i] = (np_closePx[i]-long_entry_Px)*np_long_qty[i]
                 np_long_pnl_pct[i] = (np_closePx[i]-long_entry_Px)/long_entry_Px
-                
-                # TRAIL UPDATE
-                if trail_SL is not None:
-                    if trail_TP < np_long_pnl_pct[i]:
-                        long_ITM = True
-                        np_long_trail[i] = max(trail_SL, np_long_pnl_pct[i])
-                        
-                    if long_ITM:    
-                        np_long_trail[i] = min(np_long_pnl_pct[i], np_long_pnl_pct[i]+trail_increment)
+            
                 
         # ========== #
         # SHORT
         # ========== #   
         if in_short_position and (i > short_openIdx):
-            signal = _get_signal(i,np_closePx, signals_dict, sig_lag=sig_lag, position="short",side="sell",entry_i = short_openIdx, **kwargs)
+            signal = _get_signal(i,np_closePx, signals_dict, sig_lag=sig_lag, position="short",side="sell",short_openIdx = short_openIdx, **kwargs)
             
             # ---------- #
             # EXIT SHORT
@@ -388,18 +257,9 @@ def _backtest(model_name,
             min_holding_period_flag = i >= (short_openIdx + min_holding_period) 
             signal_triggered_flag = (signal and tradable and not session_closing)
             tradable_but_session_closing = (tradable and session_closing)
-            max_holding_period_flag = (i >= (short_openIdx + max_holding_period))
-            if trail_SL is None:
-                SL_triggered_flag = False
-            else:
-                if short_ITM:
-                    SL_triggered_flag = (short_entry_Px-np_closePx[i]*(1-slippage))/np_closePx[i]*(1-slippage) < np_short_trail[i-1]
-                else:
-                    SL_triggered_flag = (short_entry_Px-np_closePx[i]*(1-slippage))/np_closePx[i]*(1-slippage) < trail_SL
-
+            max_holding_period_flag = (i >= (short_openIdx + max_holding_period))                
                 
-                
-            if min_holding_period_flag and (signal_triggered_flag or tradable_but_session_closing or SL_triggered_flag) or max_holding_period_flag:
+            if min_holding_period_flag and (signal_triggered_flag or tradable_but_session_closing) or max_holding_period_flag:
                 # Trackers
                 short_closeIdx = i
                 np_short_positions[i] = 0
@@ -438,15 +298,7 @@ def _backtest(model_name,
                 np_short_pnl_pct[i] = (short_entry_Px-np_closePx[i])/np_closePx[i]
                 
                 
-                
-                # TRAIL UPDATE
-                if trail_SL is not None:
-                    if trail_TP < np_short_pnl_pct[i]:
-                        short_ITM = True
-                        np_short_trail[i] = max(trail_SL, np_short_pnl_pct[i])
-                        
-                    if short_ITM:    
-                        np_short_trail[i] = min(np_short_pnl_pct[i], np_short_pnl_pct[i]+trail_increment)
+
                     
     # END BACKTEST, collate
     
@@ -461,8 +313,6 @@ def _backtest(model_name,
     df["L_pnl"] = np_long_pnl
     df["L_pnl%"] = np_long_pnl_pct
     df["L_rpnl"] = np_long_rpnl
-    df["L_trail"] = np_long_trail
-    df["L_comment"] = np_long_trail_comments
     
     df["S_id"] = np_short_id
     df["S_positions"] = np_short_positions
@@ -474,7 +324,7 @@ def _backtest(model_name,
     df["S_pnl"] = np_short_pnl
     df["S_pnl%"] = np_short_pnl_pct
     df["S_rpnl"] = np_short_rpnl
-    df["S_trail"] = np_short_trail
+
     
     df["A_rpnl"] = np_pnl
     df["B_pnl"] = df[kline_to_trade].pct_change()
@@ -520,6 +370,8 @@ def backtest(model_name,
               trail_TP = None, #0.0002,
               trail_increment = None,
               N = None,
+              reduce_only=False,
+              show_rolling_SR = False,
               **kwargs,
               ): #0.0001):
     
@@ -528,19 +380,23 @@ def backtest(model_name,
     # else:
     #     _window = window
     
-
+    t0 = time.time()
     df = df0.copy()
-    if N is None:
-        Ndf = df0.copy()
-        Ndf["datetime"]=Ndf.index
-        N = Ndf.groupby(Ndf["datetime"].dt.year).count().max().max()
+    # if N is None:
+    #     print("calculating N...")
+    #     Ndf = df0.copy()
+    #     Ndf["datetime"]=Ndf.index
+    #     N = Ndf.groupby(Ndf["datetime"].dt.year).count().max().max()
+    dur_N = np.round(time.time()-t0,3)
     # =============================================================================
     # TRADING TIMES AND SESSION CLOSING FLAGS
     # =============================================================================
     # Convert days of the week to trade into a set for faster lookup
+    t0 = time.time()
     days_of_the_week_to_trade = set(days_of_the_week_to_trade)
-
-    if (tradable_times is None):
+    if ("tradable" in df.columns) and ("session_closing" in df.columns):
+        pass # already calculated
+    elif (tradable_times is None):
         df["tradable"] = True
         df["session_closing"] = False
     else:
@@ -561,7 +417,7 @@ def backtest(model_name,
         # df["session_closing"] = df.index.isin(session_closing_index)
         df['session_closing'] = df['tradable'] & (~df['tradable']).shift(-1)
         df['session_closing'] = df['session_closing'].fillna(False)
-        
+    dur_trading_times = np.round(time.time()-t0,2)
     
     # =============================================================================
     # START BACKTEST
@@ -592,8 +448,9 @@ def backtest(model_name,
                    trail_TP = trail_TP,
                    trail_increment = trail_increment,
                    disable_tqdm=disable_tqdm,
+                   reduce_only=reduce_only,
                    **kwargs)
-    dur_backtest = np.round(time.time()-t0,3)
+    dur_backtest = np.round(time.time()-t0,2)
     # Add tradable column to show when to trade
     
     
@@ -606,13 +463,15 @@ def backtest(model_name,
                                                                 long_equity,
                                                                 short_equity, 
                                                                 fee=fee*10000,
-                                                                N=N,
                                                                 timeframe=timeframe,
+                                                                show_rolling_SR=show_rolling_SR,
                                                                 )
-        # print(df_trades)
+        if diagnostics_verbose: print(df_trades)
         if len(df_trades) == 0:
-            raise Exception("No trades generated")
-        dur_metrics = np.round(time.time()-t0,3)
+            # raise Exception("No trades generated")
+            if diagnostics_verbose: print(f"\n\n{'='*30}\nNo trades generated\n{'='*30}\n\n")
+            return  df_backtested, df_trades, df_summary
+        dur_metrics = np.round(time.time()-t0,2)
         # print(df_backtested.columns)
         t0=time.time()
         if plots == "simple":
@@ -636,22 +495,29 @@ def backtest(model_name,
                                 fees = fee,
                                 kline_to_trade = kline_to_trade,
                                 to_drop=metrics_table_item_to_drop,
-                                file_name = file_name)
-        elif plots == "full":
-            backtest_plots(df_backtested,
-                           df_summary[["total", "longs only", "shorts only"]],
-                           horizon_labels=horizon_labels,
-                           show_B = show_B, 
-                           title=title,
-                           figsize=figsize,
-                           fees = fee)
+                                file_name = file_name,
+                                show_rolling_sr=show_rolling_SR)
+        elif plots == "SR":
+            backtest_plots_ppt_SR(df_backtested,
+                               df_trades,
+                                df_summary,#[["total","buyhold"]], 
+                                horizon_labels=horizon_labels,
+                                show_B = show_B, 
+                                show_LS= show_LS,
+                                title=title,
+                                figsize=figsize,
+                                fees = fee,
+                                kline_to_trade = kline_to_trade,
+                                to_drop=metrics_table_item_to_drop,
+                                file_name = file_name,
+                                show_rolling_sr=show_rolling_SR)
         elif plots is False:
             pass
         
-        dur_plots = np.round(time.time()-t0,3)
+        dur_plots = np.round(time.time()-t0,2)
             
         # print(df_summary)
-        if diagnostics_verbose: print(f"\nBacktesting {df_backtested.index[0]} to {df_backtested.index[-1]} ({len(df)} rows)\nRuntimes\nbacktesting: {dur_backtest}s\nmetrics calc: {dur_metrics}s\nplots calc: {dur_plots}s")
+        if diagnostics_verbose: print(f"\nBacktesting {df_backtested.index[0]} to {df_backtested.index[-1]} \n ({len(df)} rows)\nRuntimes\ndur_N: {dur_N} s\ndur_trading_times: {dur_trading_times} s\nbacktesting: {dur_backtest} s\nmetrics calc: {dur_metrics} s\nplots calc: {dur_plots} s")
         return df_backtested,df_trades,df_summary
     
     
@@ -659,7 +525,7 @@ def backtest(model_name,
     # Output signals only
     # =============================================================================
     else:
-        print(f"Runtime:\nGenerating signals {len(df)} rows: {dur_backtest}s")
+        if diagnostics_verbose: print(f"Runtime:\nGenerating signals {len(df)} rows: {dur_backtest}s")
         # if signal_name is None:
         #     df0["L_signal"] = df["L_positions"]
         #     df0["L_signal"].fillna(0,inplace=True)

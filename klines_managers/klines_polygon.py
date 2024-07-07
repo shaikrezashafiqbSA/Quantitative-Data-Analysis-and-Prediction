@@ -5,6 +5,7 @@ from datetime import datetime
 
 from polygon import RESTClient
 from utils import pickle_helper
+from settings import POLYGON_API_KEY
 
 timespan_map = {"m":"minute",
                 "h":"hour",
@@ -29,7 +30,7 @@ def milliseconds_to_datestring(milliseconds):
 
 class KlinesManagerPolygon:
     def __init__(self, 
-                 api_key,
+                 api_key=POLYGON_API_KEY,
                  database_path = "./database/klines/polygon/"):
         self.client = RESTClient(api_key=api_key)
         self.database_path = database_path
@@ -40,7 +41,8 @@ class KlinesManagerPolygon:
                   since,
                   limit=5000,
                   max_retries = 3,
-                  verbose = True):
+                  verbose = True,
+                  to="2100-12-31"):
         num_retries = 0
         sleep_length = 10000
         multiplier=int(timeframe[:-1])
@@ -49,10 +51,10 @@ class KlinesManagerPolygon:
             try: 
                 # if verbose: print(f"Loading {symbol} {multiplier} {timespan} from {since}")
                 klines = self.client.get_aggs(ticker=symbol,
-                                              multiplier=multiplier,
-                                              timespan=timespan, 
+                                              multiplier=multiplier, #1h --> h
+                                              timespan=timespan,     #1h --> 1
                                               from_= since, 
-                                              to="2100-12-31") 
+                                              to=to) 
             except Exception as e:
                 num_retries += 1
                 print(f"{e} \n---> retry attempt: {num_retries}")
@@ -102,7 +104,7 @@ class KlinesManagerPolygon:
             fetched_until = ohlcv[-1].timestamp
             if verbose: print(f"{symbol} fetched: {milliseconds_to_datestring(fetched_since)} to {milliseconds_to_datestring(fetched_until)}")
             if fetched_since >= until_timestamp:# or fetched_since is None:
-                print(f"break: {milliseconds_to_datestring(fetched_since)} >= {milliseconds_to_datestring(until_timestamp)}")
+                print(f"BREAK: fetched_since ({milliseconds_to_datestring(fetched_since)}) >= until_timestamp ({milliseconds_to_datestring(until_timestamp)})")
                 break
             all_ohlcv = all_ohlcv + ohlcv
             total_fetched_since = all_ohlcv[0].timestamp
@@ -110,7 +112,7 @@ class KlinesManagerPolygon:
             
             if verbose: print(f"---> {len(all_ohlcv)} | {milliseconds_to_datestring(total_fetched_since)} to {milliseconds_to_datestring(total_fetched_until)}")
             if fetch_since == total_fetched_until:
-                if verbose: print(f"End of the line, buddy")
+                print(f"BREAK: fetch_since ({milliseconds_to_datestring(fetch_since)}) == total_fetched_until ({milliseconds_to_datestring(total_fetched_until)})")
                 break
             else:
                 fetch_since = total_fetched_until
@@ -161,6 +163,8 @@ class KlinesManagerPolygon:
                     t1 = np.round(time.time() - t0,2)
                     df_old_end_datetime = df_old.index[-1].strftime("%Y-%m-%d %H:%M:%S")
                     df_old_start_datetime = df_old.index[0].strftime("%Y-%m-%d %H:%M:%S")
+                    # 
+                    
                     if since < df_old_start_datetime:
                         if verbose: print(f"Requested ({since}) < available ({df_old_start_datetime}) ---> Querying from {since}")
                         new_since = since
@@ -194,7 +198,7 @@ class KlinesManagerPolygon:
                     df = pd.concat([df_old,df_updated])
                 else:
                     df = df_updated.copy()
-                    
+                df.sort_index(inplace=True)    
                 df.drop_duplicates(subset=["close_time"], keep="last", inplace=True)    
                 # Save updated df to pickle
                 pickle_helper.pickle_this(data=df, pickle_name=f"{instrument}_{timeframe}",path=self.database_path)

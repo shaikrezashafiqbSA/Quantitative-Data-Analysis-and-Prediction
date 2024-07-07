@@ -20,13 +20,13 @@ def calc_sr(x):
         return 0
 
 @nb.njit(cache=True)
-def calc_rolling_sr(ret, window):
-    print(ret)
+def calc_rolling_sr(ret, window, buffer=120):
+    # print(ret)
     n=len(ret)
     np_rolling_sr = np.full(n,np.nan)
     
     for i in range(n):
-        if i <window:
+        if (i <window) or (np.mod(i,buffer) != 0):
             continue
         x = ret[i-window:i+1]
         np_rolling_sr[i] = calc_sr(x)
