@@ -175,3 +175,16 @@ cython_debug/
 .DS_Store
 .__pycache__
 
+/logs/
+/Old experiments/
+/database/klines/
+/backtests/old/
+/backtesters/get_trading_decision copy.py
+/performance_analytics/metrics_new.py
+/PNL/Performance_Dubai_BTCUSD.xlsx
+/PNL/Performance_Dubai_BTCUSD.png
+/PNL/Ferro_backtest.csv
+/.env_1
+/USDSGD_zscore2_with_TPSL.png
+/test_folder/test1.py
+/QUANT_RESEARCHER.code-workspace

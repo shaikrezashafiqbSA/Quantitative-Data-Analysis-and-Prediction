@@ -2,6 +2,16 @@ pandas
 numpy
 numba
 matplotlib
-plotly
+plotly 
 tqdm
 ccxt
+python-rapidjson
+
+polygon-api-client
+websockets
+python-dotenv
+websocket-client
+psycopg2-binary
+apscheduler
+# PyPDF2
+# pycryptodome

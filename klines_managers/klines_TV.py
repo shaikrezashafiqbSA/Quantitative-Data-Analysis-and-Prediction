@@ -90,6 +90,7 @@ class KlinesManagerTV:
     def load_ohlcvs(self,
                     instruments, 
                     timeframes,
+                    update=False,
                     limit = 10000,
                     timezone = {"from":"Asia/Singapore", "to":"UTC"},
                     max_retries=3,
@@ -106,6 +107,9 @@ class KlinesManagerTV:
                 t0 = time.time()
                 try:
                     df_old = pickle_helper.pickle_this(data=None, pickle_name=f"{instrument}_{timeframe}",path=self.database_path)
+                    if not update:
+                        temp[timeframe] = df_old
+                        break
                     t1 = np.round(time.time() - t0,2)
                     if verbose: print(f"--> in database ({len(df_old)} rows): {df_old.index[0]} ===> {df_old.index[-1]} ({t1}s)") 
                 except Exception as e:
@@ -246,7 +250,7 @@ if __name__ == "__main__":
     ktv = KlinesManagerTV()
     instrument = "EURUSD"
     check = ktv.query_symbol(instrument=instrument)
-    check = check[check["type"]=="forex"]
+    check = check[check["type"] == "forex"]
         
     
     #%%

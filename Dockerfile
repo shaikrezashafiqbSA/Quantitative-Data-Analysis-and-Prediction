@@ -13,5 +13,6 @@ RUN pip install -r requirements.txt
 # copy every content from the local file to the image
 COPY . /app
 
-# configure the container to run in an executed manner
-CMD ["python", "-u", "app.py" ]
+# configure the container to run in an executed manner (u flag for unbuffered output)
+CMD ["python", "-u", "trading_bot_main.py" ] 
+# CMD ["python", "-u", "test_bot.py" ] 

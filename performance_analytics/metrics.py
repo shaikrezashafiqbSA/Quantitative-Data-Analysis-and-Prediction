@@ -30,22 +30,28 @@ def calc_equity_drawdown(equity):
     return dd
 
 
-def backtest_summary(df0,long_starting_equity,short_starting_equity, N=255*24*12, rolling_sr_window=None, fee=1, min_bar_size=5, timeframe="3h"): # sr=12*24*20*3
-    df=df0.copy()
+def backtest_summary(df,
+                    long_starting_equity,
+                    short_starting_equity,
+                    show_rolling_SR=False,
+                    fee=1,
+                    timeframe="3h"
+                    ): 
+    """
+    Where N is number of trades
+    """
     total_equity = long_starting_equity + short_starting_equity
     summary_index = ["L","S","A","B"]
-    # print(df.columns)
-    initial_column_names = list(df.columns)
     
     df["A_rpnl"] = df[["L_rpnl","S_rpnl"]].sum(axis=1, min_count=1)
     
     # CUM PNL CALCULATIONS
-    df["cum_L_rpnl"] = df['L_rpnl'].cumsum().fillna(method="ffill")
-    df["cum_S_rpnl"] = df['S_rpnl'].cumsum().fillna(method="ffill")
+    df["cum_L_rpnl"] = df['L_rpnl'].cumsum().ffill() #fillna(method="ffill")
+    df["cum_S_rpnl"] = df['S_rpnl'].cumsum().ffill() #fillna(method="ffill")
     df["cum_A_rpnl"] = df[["cum_L_rpnl","cum_S_rpnl"]].sum(axis=1)
     # this will inflate cum pnl%!! so have to 
-    df["L_pnl"].fillna(method="ffill", inplace=True)
-    df["S_pnl"].fillna(method="ffill", inplace=True)
+    df["L_pnl"] = df["L_pnl"].ffill() #fillna(method="ffill", inplace=True)
+    df["S_pnl"] = df["S_pnl"].ffill()  #.fillna(method="ffill", inplace=True)
     
     df["cum_L_pnl"]=df[["cum_L_rpnl","L_pnl"]].sum(axis=1)
     df["cum_S_pnl"]=df[["cum_S_rpnl","S_pnl"]].sum(axis=1)
@@ -65,22 +71,6 @@ def backtest_summary(df0,long_starting_equity,short_starting_equity, N=255*24*12
     df["dd_L"]=calc_equity_drawdown(df["cum_L_pnl"]+long_starting_equity)
     df["dd_S"]=calc_equity_drawdown(df["cum_S_pnl"]+short_starting_equity)
     
-    
-    # ROLLING SHARPE CALCULATION ---> THIS TAKES QUITE A LOT OF TIME TO PROCESS ~ 1minute
-    # Consider numbarising this, it is possible
-    # TODO: numbarise this
-    t0=time.time()
-    
-    if rolling_sr_window is not None:
-        print(f"rolling_sr_window is not None: {rolling_sr_window is not None}")
-        try:
-            df["A_rolling_SR"] = rolling_sr.calc_rolling_sr(df["cum_A_pnl%"].pct_change().values, window=rolling_sr_window)*np.sqrt(N)
-            df["L_rolling_SR"] = rolling_sr.calc_rolling_sr(df["cum_L_pnl%"].pct_change().values, window=rolling_sr_window)*np.sqrt(N)
-            df["S_rolling_SR"] = rolling_sr.calc_rolling_sr(df["cum_S_pnl%"].pct_change().values, window=rolling_sr_window)*np.sqrt(N)
-        except Exception as e:
-            print(f"ERROR: \n {e}")
-    
-    # max daily trades charts
     
     
     trade_cols = ['L_id',
@@ -168,21 +158,29 @@ def backtest_summary(df0,long_starting_equity,short_starting_equity, N=255*24*12
             # total_trades[c] = wins+lose
             if c in ["S","L"]:
                 try:
-                    no_total_trades = trades[f'{c}_id'].dropna()[-1]
+                    no_total_trades = trades[f'{c}_id'].dropna().iloc[-1]
                 except Exception as e:
                     no_total_trades = 0
                 total_trades[c] = no_total_trades
-                
-                winrate[c] = wins/(total_trades[c])*100
-                loserate[c] = lose/(total_trades[c])*100
-                drawrate[c] = draw/(total_trades[c])*100
+                if total_trades[c] == 0:
+                    winrate[c] = 0
+                    loserate[c] = 0
+                    drawrate[c] = 0
+                else:
+                    winrate[c] = wins/(total_trades[c])*100
+                    loserate[c] = lose/(total_trades[c])*100
+                    drawrate[c] = draw/(total_trades[c])*100
                 
             elif c in ["A"]:
                 total_trades[c] = total_trades["S"]  + total_trades["L"] 
-                
-                winrate[c] = wins/(total_trades[c])*100
-                loserate[c] = lose/(total_trades[c])*100
-                drawrate[c] = draw/(total_trades[c])*100
+                if total_trades[c] == 0:
+                    winrate[c] = 0
+                    loserate[c] = 0
+                    drawrate[c] = 0
+                else:
+                    winrate[c] = wins/(total_trades[c])*100
+                    loserate[c] = lose/(total_trades[c])*100
+                    drawrate[c] = draw/(total_trades[c])*100
  
             
     
@@ -218,7 +216,10 @@ def backtest_summary(df0,long_starting_equity,short_starting_equity, N=255*24*12
             
             gains =  w_trades.sum()
             pains =  l_trades.sum()
-            p2g[c] =  gains/np.abs(pains)
+            if np.abs(pains) == 0:
+                p2g[c] = 0
+            else:
+                p2g[c] =  gains/np.abs(pains)
             
             avg_wins[c] = w_trades.mean()
             med_wins[c] = w_trades.median()
@@ -233,15 +234,27 @@ def backtest_summary(df0,long_starting_equity,short_starting_equity, N=255*24*12
 
     # sharpe = trades['long_rpnl'].mean() / trades['long_rpnl'].std() * np.sqrt(number_of_trades) 
     sharpes = {}
+    timeframes = {
+        "1m": 24 * 60 * 5 * 52, # 
+        "2m": 12 * 60 * 5 * 52, # 24 * 60 * 5 * 52 / 2
+        "3m": 8 * 60 * 5 * 52, # 24 * 60 * 5 * 52 / 3
+        "4m": 6 * 60 * 5 * 52, # 24 * 60 * 5 * 52 / 4
+        "5m": 24 * 60 / 5 * 5 * 52, # 24 * 60 * 5 * 52 / 5
+        # Add more timeframes as needed
+    }
 
-    
+    if timeframe in timeframes:
+        N = timeframes[timeframe]
+    else:
+        raise ValueError("Invalid timeframe specified.")
+    years = (df.index[-1] - df.index[0]).days/255
     for c in summary_index:
         if c == "B":
             ret = df[f"cum_{c}_pnl%"].diff()
             if ret.std() == 0:
                 sharpes[c] = 0
             else:
-                sharpes[c] = (ret.mean() / ret.std()) *np.sqrt(N)
+                sharpes[c] = (ret.mean() / ret.std()) *np.sqrt(1)
         else:
             # Since hourly  #total_trades[c] / ((df.index[-1] - df.index[0]).days) # where N is number of trades in a day
             # ret = df[f"cum_{c}_pnl%"]
@@ -251,19 +264,31 @@ def backtest_summary(df0,long_starting_equity,short_starting_equity, N=255*24*12
             if ret.std() == 0:
                 sharpes[c] = 0
             else:
-                sharpes[c] = (ret.mean() / ret.std()) *np.sqrt(N)
-    
-    # def sharpe(returns,N):
-    # # >1 is good
-    #     return returns.mean()*N/returns.std()/ np.sqrt(N)
-    # def sortino(returns,N):
-    #     # 0 - 1.0 is suboptimal, 1> good, 3> very good
-    #     std_neg = returns[returns<0].std()*np.sqrt(N)
-    #     return returns.mean()*N/std_neg
+                sharpes[c] = (ret.mean() / ret.std())  * np.sqrt(N) # *np.sqrt(number_of_trades[c]) # 
 
-    # def calmar(returns,N,mdd):
-    #     # > 0.5 is good, 3.0 to 5.0 is very good
-    #     return returns.mean()*N/abs(mdd/100)
+    # sharpe cleaning
+    print(sharpes["S"])
+    if sharpes["S"] == 0.0 or np.isnan(sharpes["S"]):
+        sharpes["A"] = sharpes["L"]
+    if sharpes["L"] == 0.0 or np.isnan(sharpes["L"]):
+        sharpes["A"] = sharpes["S"]
+    
+    # ROLLING SHARPE CALCULATION ---> THIS TAKES QUITE A LOT OF TIME TO PROCESS ~ 1minute
+    # Consider numbarising this, it is possible
+    # TODO: numbarise this
+    t0=time.time()
+    
+    if show_rolling_SR:
+        for c in ["A","L","S"]:
+            try:
+                # set rolling window size to 3 months
+                rolling_sr_window_size = df.groupby(df.index.year).count()["close"].mean()/4#.groupby(df_backtested_TP.index.month).count()
+                df[f"{c}_rolling_SR"] = rolling_sr.calc_rolling_sr(df[f"cum_{c}_pnl%"].pct_change().values, window=rolling_sr_window_size)*np.sqrt(number_of_trades[c]/years)
+                df[f"{c}_rolling_SR"] = df[f"{c}_rolling_SR"].fillna(method="ffill")
+            except Exception as e:
+                print(f"ERROR: \n {e}")
+    
+    # max daily trades charts
     
     # Fees
     fees = {}
@@ -313,6 +338,7 @@ def backtest_summary(df0,long_starting_equity,short_starting_equity, N=255*24*12
             
             
     summary = {"Sharpe": sharpes,
+    
                "Total Return %":ret,
                "Equity Start $":eq_start,
                "Total Return $":pnl,
@@ -339,28 +365,28 @@ def backtest_summary(df0,long_starting_equity,short_starting_equity, N=255*24*12
     
     summary_rounds = {"Sharpe": 2,
                        "Total Return %":2,
-                       "Equity Start":2,
-                       "Total Return":2,
+                       "Equity Start $":2,
+                       "Total Return $":2,
                        "Fee (bps)": 1,
                        "Total Fees $": 2,
-                       "Equity End " :2,
+                       "Equity End $" :2,
                        # "":{"L":"","S":"","A":"","B":""},
                        "Win Rate %":3,
                        "Lose Rate %":3,
                        "Draw Rate %": 3, 
-                       "pnl_mean ":3,
-                       "pnl_median":3,
-                       "wins_mean":3,
-                       "wins_median":3,
-                       "loss_mean":3,
-                       "loss_median":3,
+                       "pnl_mean $":3,
+                       "pnl_median $":3,
+                       "wins_mean $":3,
+                       "wins_median $":3,
+                       "loss_mean $":3,
+                       "loss_median $":3,
                        # "":{"L":"","S":"","A":"","B":""},
                        "Profit Factor":2,
                        "total_trades": 1,
                        "MDD %":2,
-                       "Dur median":0,
-                       "Dur max":0,
-                       "Dur min":0}
+                        f"HP mean ({timeframe_interval})":1,
+                        f"HP max ({timeframe_interval})":1,
+                        f"HP min ({timeframe_interval})":1}
     
     # Tidy up trades table
     output_trade_cols = ['L_id',
@@ -383,15 +409,28 @@ def backtest_summary(df0,long_starting_equity,short_starting_equity, N=255*24*12
                         'cum_A_pnl']
     
     #  Tidy up summary tables
+    # summary_df = pd.DataFrame(summary)
+    # for col in summary.keys():
+    #     summary_df[col] = summary_df[[col]].round(decimals=pd.Series(list(summary_rounds.values()), index=summary_df.T.index))
+    #     # [2,2,2,2,2,2,2,3,3,3,3,3,3,1,1,2,2,2,2,2,2]
+    # summary_df = summary_df.astype(object).T
+    
+    # summary_df=summary_df[["A","L","S","B"]]
+    # summary_df.rename(columns={"L":"longs only","S":"shorts only","A":"total","B":"buyhold"},inplace=True)
+    # return df, trades[output_trade_cols], summary_df
     summary_df = pd.DataFrame(summary)
     for col in summary.keys():
-        summary_df[col] = summary_df[[col]].round(decimals=pd.Series(list(summary_rounds.values()), index=summary_df.T.index))
-        # [2,2,2,2,2,2,2,3,3,3,3,3,3,1,1,2,2,2,2,2,2]
+        if col in summary_rounds.keys():  # check if the column exists in summary_rounds
+            summary_df[col] = summary_df[[col]].round(decimals=summary_rounds[col])  # use the corresponding value to round
+        else:
+            summary_df[col] = summary_df[[col]]  # if the column does not exist in summary_rounds, leave it as is
     summary_df = summary_df.astype(object).T
-    
+
     summary_df=summary_df[["A","L","S","B"]]
     summary_df.rename(columns={"L":"longs only","S":"shorts only","A":"total","B":"buyhold"},inplace=True)
+    summary_df.fillna(0, inplace=True)
     return df, trades[output_trade_cols], summary_df
+
 
 
 

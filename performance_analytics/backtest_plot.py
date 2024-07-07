@@ -402,6 +402,7 @@ def backtest_plots_simplified(df,
 import matplotlib.gridspec as gridspec
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.ticker as ticker
+
 def backtest_plots_ppt(df,
                        df_trades,
                         metrics_table0,
@@ -415,7 +416,8 @@ def backtest_plots_ppt(df,
                          equity=1e6,
                          kline_to_trade = "5m_close",
                          file_name = "model",
-                         to_drop=["Lose Rate %"]):
+                         to_drop=["Lose Rate %"],
+                         show_rolling_sr=None):
     
 
     fig = plt.figure()
@@ -432,31 +434,15 @@ def backtest_plots_ppt(df,
     
     ax_pct_aum = plt.subplot2grid(shape=(4,6), loc=(3,4), colspan=4)
 
-        # print(f"========????? bins_df['%']{bins_df}")
-
-    # ax_key_pnl = plt.subplot2grid(shape=(4,6), loc=(1,0), colspan=6)
-    # ax_table = plt.subplot2grid(shape=(4,6), loc=(0,0), colspan=6)
-    
-    # ax_key_bins = plt.subplot2grid(shape=(4,6), loc=(1,0), colspan=6)
-    # ax_key_bins2 = plt.subplot2grid(shape=(4,6), loc=(2,0), colspan=6)
-    # ax_key_bins3 = plt.subplot2grid(shape=(4,6), loc=(3,0), colspan=6)
-    
-    # ax_pct_aum = plt.subplot2grid(shape=(4,6), loc=(3,4), colspan=4)
-
-    
-    
-    alpha = 0.5 
-
-    
     # =============================================================================
     # SUBPLOT 0: metrics table
     # =============================================================================
-    subplot_row = 0
-    subplot_col = 1
     ax_table.axis("off")
 
 
     metrics_table = metrics_table0.copy()
+    # metrics_table = metrics_table.transpose()
+
     metrics_table.rename(columns={"buyhold":"benchmark"},inplace=True)
     if fees ==0.0:
         metrics_table=metrics_table.drop(["Fee (bps)","Total Fees $"])
@@ -502,6 +488,8 @@ def backtest_plots_ppt(df,
                 
         colors_yx.append(colors_in_column)
         
+
+
     table = ax_table.table(cellText=metrics_table.values,
                            rowLabels=list(metrics_table.index),
                            colLabels= list(metrics_table.columns),
@@ -565,19 +553,16 @@ def backtest_plots_ppt(df,
         
     ax_key_pnl.set_title(f"{title}\n{df.index[0].date()} to {df.index[-1].date()}\n\n\n(A) Performance: % Excess Returns VS Benchmark",fontdict={"fontsize":20,"color":"darkblue"}, loc='left')
     ax_key_pnl.grid()
-    # df["cum_B_pnl%"].plot(label=f'buyhold % pnl', color="black",ax=axs[subplot_row,subplot_col], linewidth=linewidth).axhline(0,color="red", linewidth=0.5, linestyle="--", alpha=0.5)
-    # df['cum_A_pnl%'].plot(label=strat_label, color="blue",ax=axs[subplot_row+1,subplot_col], linewidth=linewidth).axhline(0,color="red", linewidth=0.5, linestyle="--", alpha=0.5)
-    # df['cum_L_pnl%'].plot(label=long_only_label, color="green",ax=axs[subplot_row+2,subplot_col], linewidth=linewidth, alpha=alpha).axhline(0,color="red", linewidth=0.5, linestyle="--", alpha=0.5)
-    # df['cum_S_pnl%'].plot(label=short_only_label, color="orange",ax=axs[subplot_row+3,subplot_col], alpha=alpha, linewidth=linewidth).axhline(0,color="red", linewidth=0.5, linestyle="--", alpha=0.5)
-    
+
+
     # =============================================================================
     # BAR PLOTS MONTHLY
     # =============================================================================
     bins_df = pd.DataFrame()
-    bins_df["Benchmark"]=df.groupby(pd.PeriodIndex(df.index, freq="M"))["cum_B_pnl%"].apply(lambda x: x.iloc[-1]-x.fillna(method="bfill").iloc[1])
-    bins_df["Model"] = df.groupby(pd.PeriodIndex(df.index, freq="M"))["cum_A_pnl%"].apply(lambda x: x.iloc[-1]-x.fillna(method="bfill").iloc[1])
-    bins_df["longs"] = df.groupby(pd.PeriodIndex(df.index, freq="M"))["cum_L_pnl%"].apply(lambda x: x.iloc[-1]-x.fillna(method="bfill").iloc[1])
-    bins_df["shorts"] = df.groupby(pd.PeriodIndex(df.index, freq="M"))["cum_S_pnl%"].apply(lambda x: x.iloc[-1]-x.fillna(method="bfill").iloc[1])
+    bins_df["Benchmark"]=df.groupby(pd.PeriodIndex(df.index, freq="M"))["cum_B_pnl%"].apply(lambda x: x.iloc[-1]-x.iloc[0])#.apply(lambda x: x.iloc[-1]-x.fillna(method="bfill").iloc[1])
+    bins_df["Model"] = df.groupby(pd.PeriodIndex(df.index, freq="M"))["cum_A_pnl%"].apply(lambda x: x.iloc[-1]-x.iloc[0])#.apply(lambda x: x.iloc[-1]-x.fillna(method="bfill").iloc[1])
+    bins_df["longs"] = df.groupby(pd.PeriodIndex(df.index, freq="M"))["cum_L_pnl%"].apply(lambda x: x.iloc[-1]-x.iloc[0])#.apply(lambda x: x.iloc[-1]-x.fillna(method="bfill").iloc[1])
+    bins_df["shorts"] = df.groupby(pd.PeriodIndex(df.index, freq="M"))["cum_S_pnl%"].apply(lambda x: x.iloc[-1]-x.iloc[0])#.apply(lambda x: x.iloc[-1]-x.fillna(method="bfill").iloc[1])
     bins_df.index.name = None
     if show_LS:
         bins_df[["Benchmark","Model", "longs","shorts"]].plot(kind="bar",ax=ax_key_bins,color=["black","blue", "green","orange"]).axhline(color="red",linewidth=0.5, linestyle="--", alpha=0.75)#.axhline(0,color="red"
@@ -628,23 +613,6 @@ def backtest_plots_ppt(df,
     ax_key_bins3.set_title(f"(B) (iii) Performance: % Excess YEARLY Returns VS Benchmark",fontdict={"fontsize":15,"color":"darkblue"},x=0.38)
     ax_key_bins3.grid()
     ax_key_bins3.tick_params(labelrotation=30, labelsize=8)
-    # ax_key_bins3.yaxis.set_major_locator(ticker.MultipleLocator(10)) 
-    
-    # =============================================================================
-    # SUBPLOT aum pct
-    # =============================================================================
-    # subplot_row = 2
-    # subplot_col = 0
-    
-    # # df["dd_B"].plot(label=f'B%', color="black",ax=axs[2,0])
-    # # df['dd_A'].plot(label=f'A%', color="blue",ax=axs[2,0])
-    # df['dd_A'].groupby(df.index.date).max().plot(label=f'daily max drawdown %', color="red",ax=axs[subplot_row,subplot_col], linewidth=linewidth)
-    # # df[['dd_L']].plot(label=f'L%', color="green",ax=axs[2], linewidth=linewidth)
-    # # df[['dd_S']].plot(label=f'S%', color="orange",ax=axs[2], linewidth=linewidth).axhline(100,color="red")
-    # # axs[4,0].legend(loc='center left', bbox_to_anchor=(4, 0.5))
-    # # axs[4,0].set_ylim([-5, 0])
-    # axs[subplot_row,subplot_col].title.set_text(f"% Daily Max Drawdowns")
-    
     
     
     # =============================================================================
@@ -664,26 +632,197 @@ def backtest_plots_ppt(df,
     bins_df["Total Traded Vol"] = dft.groupby(pd.PeriodIndex(dft.index, freq="Y"))["vol_traded"].sum()
     bins_df["AUM end"] = dft.groupby(pd.PeriodIndex(dft.index, freq="Y"))["AUM"].apply(lambda x: x.iloc[-1])
     bins_df["%"] = bins_df["Total Traded Vol"]/bins_df["AUM end"]*100 
-
+    
     bins_df[["%"]].plot(kind="bar",ax=ax_pct_aum,color=["purple"])#.axhline(color="red",linewidth=0.5, linestyle="--", alpha=0.75)#.axhline(0,color="red"
     ax_pct_aum.tick_params(axis='both', which='major', labelsize=6)
     ax_pct_aum.tick_params(axis='both', which='minor', labelsize=4)
     ax_pct_aum.set_title(f"(D) Total Traded Volume as % of AUM",fontdict={"fontsize":15,"color":"darkblue"},x=0.45)
-    # test= df[[f"{timeframe}_close_US500", f"{timeframe}_close"]].copy()
-    # test.rename(columns={f"{timeframe}_close_US500":"SPX",f"{timeframe}_close":"BTCUSD"},inplace=True)
-    # test.plot(secondary_y="SPX",ax=axs[subplot_row,subplot_col],linewidth=linewidth)#,bbox = [0.4, -0.5, 0.4, 4]) # x, y shift, width, height)
-    # axs[subplot_row,subplot_col].title.set_text(f"SPX and BTCUSD prices")
+    if file_name is not None:
+        fig.savefig(f"./backtests/{file_name}.pdf", bbox_inches='tight')
+
+
+
+
+def backtest_plots_ppt_SR(df,
+                        df_trades,
+                        metrics_table0,
+                         horizon_labels=None,
+                         show_B=True,
+                         show_LS=False,
+                         title="test", 
+                         figsize=(25,12), 
+                         linewidth=0.75,
+                         fees=0.0002,
+                         equity=1e6,
+                         kline_to_trade = "5m_close",
+                         file_name = "model",
+                         to_drop=["Lose Rate %"],
+                         show_rolling_sr=None):
     
-    # axs[subplot_col, subplot_col].
-    # df["dd_B"].plot(label=f'B%', color="black",ax=axs[2,0])
-    # df['dd_A'].plot(label=f'A%', color="blue",ax=axs[2,0])
-    # df['rolling_SR'].plot(label=f'rolling quarterly sharpe', color="green",ax=axs[2,1], linewidth=linewidth).axhline(0,color="red")
-    # # axs[5,0].legend(loc='center left', bbox_to_anchor=(4, 0.5))
-    # # axs[5,0].set_ylim([-5, 0])
-    # axs[2,1].title.set_text(f"Quarterly rolling sharpe")
-    # axs[subplot_row].legend(bbox_to_anchor=(1.3,0.6))
-    # plt.savefig(f"./backtests/{timeframe}BTCSPX_model.png", dpi=300, bbox_inches="tight")
-    # fig.suptitle(f"{title}\n {df.index[0].date()} to {df.index[-1].date()}", fontsize="40")
-    # fig.tight_layout(pad=0., w_pad=0.0, h_pad=0.1)
+
+    fig = plt.figure()
+    fig.set_figheight(figsize[0])
+    fig.set_figwidth(figsize[1])
+    fig.set_dpi(300.0)
+
+    ax_table = plt.subplot2grid(shape=(3,2), loc=(0,0), rowspan=1, colspan=2)
+    ax_key_pnl = plt.subplot2grid(shape=(3,2), loc=(1,0), rowspan=1, colspan=2)
+    ax_rolling_sharpe = plt.subplot2grid(shape=(3,2), loc=(2,0), rowspan=1, colspan=2)
+
+    # =============================================================================
+    # SUBPLOT 0: metrics table
+    # =============================================================================
+    ax_table.axis("off")
+
+
+    metrics_table = metrics_table0.copy()
+
+    for row_to_drop in to_drop:
+        metrics_table.drop(row_to_drop,inplace=True)
+    
+
+    metrics_table = metrics_table.transpose()
+
+    metrics_table.rename(columns={"buyhold":"benchmark"},inplace=True)
+    if fees ==0.0:
+        metrics_table=metrics_table.drop(["Fee (bps)","Total Fees $"])
+    # plt.rcParams["figure.dpi"] = 300
+    hp_labels = list(metrics_table.T.filter(regex="HP").columns)
+    colors_yx = []
+    for metric, row in metrics_table.iterrows():
+        colors_in_column = ["#DCDCDC"]*len(metrics_table.columns)
+        for i,col in enumerate(metrics_table.columns):
+            if metric in ["Equity Start $", "Fee (bps)","total_trades", "Total Fees $"]+hp_labels:
+                colors_in_column[i] = "#DCDCDC"
+                
+            elif metric == "Equity End $":
+                if row[col] <=metrics_table.loc["Equity Start $",col]:
+                    colors_in_column[i] = "#CD5C5C"
+                else:
+                    colors_in_column[i] = "#98FB98"
+                    
+            elif metric == "Win Rate %":
+                if row[col] <=50:
+                    colors_in_column[i] = "#CD5C5C"
+                else:
+                    colors_in_column[i] = "#98FB98" 
+                    
+            elif metric == "Lose Rate %":
+                if row[col] >=50:
+                    colors_in_column[i] = "#CD5C5C"
+                else:
+                    colors_in_column[i] = "#98FB98" 
+                    
+            elif metric == "Profit Factor":
+                if row[col] <=1:
+                    colors_in_column[i] = "#CD5C5C" # red
+                else:
+                    colors_in_column[i] = "#98FB98"  # green
+                    
+            elif row[col]>0.0:
+                colors_in_column[i] = "#98FB98"
+            elif row[col] < 0.0:
+                colors_in_column[i] = "#CD5C5C"
+                
+        colors_yx.append(colors_in_column)
+        
+
+
+    table = ax_table.table(cellText=metrics_table.values,
+                           rowLabels=list(metrics_table.index),
+                           colLabels= list(metrics_table.columns),
+                        #    loc="right",
+                        #    colWidths=[0.2,0.2,0.2]
+                           cellColours=colors_yx,
+                           bbox = [0, 0, 1, 1] # x, y shift, width, height
+                           )
+    table.auto_set_font_size(False)
+    table.set_fontsize(12)
+    # table.scale(2, 2)  # may help
+    
+    ax_table.set_title(f"{title}\n{df.index[0].date()} to {df.index[-1].date()}\n(A) Key Performance Metrics",y=0.5,x=0.2,fontdict={"fontsize":20,"color":"darkblue"})
+    
+    # =============================================================================
+    # ax_key_pnl 
+    # =============================================================================
+    long_only_label = "longs only"
+    short_only_label = "shorts only"
+    strat_label = "total"
+    # df[["cum_B_pnl%","cum_A_pnl%","cum_L_pnl%","cum_S_pnl%"]]=df[["cum_B_pnl%","cum_A_pnl%","cum_L_pnl%","cum_S_pnl%"]]-100
+
+    """
+    a) Key performance: model vs index
+    """
+    test= df[[f"cum_B_pnl%", f"cum_A_pnl%",f"cum_L_pnl%",f"cum_S_pnl%"]].copy()
+    test.rename(columns={f"cum_B_pnl%":"Benchmark",f"cum_A_pnl%":strat_label,f"cum_L_pnl%":long_only_label,f"cum_S_pnl%":short_only_label },inplace=True)
+    test.index.name=None
+    if show_LS and show_B:
+        lines_to_plot = ["Benchmark","longs only","shorts only"]
+        color = ["black","green","orange"]
+        style = ["--","-","-"]
+    
+    elif not show_LS and show_B:
+        lines_to_plot = ["Benchmark"]
+        color=["black","blue"]
+        style = ["--","-","-"]
+
+    elif not show_LS and not show_B:
+        lines_to_plot = []
+        color=["black","blue"]
+        style = ["--","-","-"]
+
+    if len(lines_to_plot) > 0:
+        if horizon_labels is None:    
+            test[lines_to_plot].plot(ax=ax_key_pnl,linewidth=linewidth, color=color, style=style)
+        else:
+            test[lines_to_plot].plot(ax=ax_key_pnl,linewidth=linewidth, color=color, style=style).axvline(horizon_labels,color="red", linewidth=0.5, linestyle="-", alpha=1)
+
+    
+    test[[strat_label]].plot(ax=ax_key_pnl, linewidth=linewidth,color=["blue"], style=["-"]).axhline(0,color="red", linewidth=0.5, linestyle="-", alpha=1)
+        
+    ax_key_pnl.set_title(f"(B) Performance: % Excess Returns VS Benchmark",fontdict={"fontsize":20,"color":"darkblue"}, loc='left')
+    ax_key_pnl.grid()
+
+    # =============================================================================
+    # rolling sharpe plot
+    # =============================================================================
+    """
+    a) Rolling sharpe 3 months lookback
+    """
+    
+    test= df[[f"A_rolling_SR", f"L_rolling_SR",f"S_rolling_SR"]].copy()
+    # test[["total","longs only","shorts only"]] = test[[f"A_rolling_SR", f"L_rolling_SR",f"S_rolling_SR"]]
+    test.rename(columns={f"A_rolling_SR":"total",
+                         f"L_rolling_SR":"longs only",
+                         f"S_rolling_SR": "shorts only",}
+                         ,inplace=True)
+    # lines_to_plot = ["model","longs","shorts"]
+    color = ["blue","green","orange"]
+    style = ["--","-","-"]
+
+    test.plot(ax=ax_rolling_sharpe,linewidth=linewidth, color=color, style=style)
+    ax_rolling_sharpe.set_title(f"(C) 3 months Rolling Sharpe",fontdict={"fontsize":20,"color":"darkblue"}, loc='left')
+    ax_rolling_sharpe.grid()
+
+        
+    # =============================================================================
+    # DD plots
+    # =============================================================================
+    # test= df[[f"dd_A", f"dd_L",f"dd_S"]]#.copy()
+    # # test.rename(columns={f"cum_B_pnl%":"Benchmark",f"cum_A_pnl%":"Model",f"cum_L_pnl%":"longs",f"cum_S_pnl%":"shorts" },inplace=True)
+    # # test.index.name=None
+
+    # lines_to_plot = ["model","longs","shorts"]
+    # color = ["blue","green","orange"]
+    # style = ["--","-","-"]
+
+    # test[lines_to_plot].plot(ax=ax_rolling_sharpe,linewidth=linewidth, color=color, style=style)
+ 
+    # # test[["Model"]].plot(ax=ax_rolling_sharpe, linewidth=linewidth,color=["blue"], style=["-"]).axhline(0,color="red", linewidth=0.5, linestyle="-", alpha=1)
+        
+    # ax_rolling_sharpe.set_title(f"{title}\n{df.index[0].date()} to {df.index[-1].date()}\n\n\n(A) 3 months Rolling Sharpe",fontdict={"fontsize":20,"color":"darkblue"}, loc='left')
+    # ax_rolling_sharpe.grid()
+
+
     # if file_name is not None:
     #     fig.savefig(f"./backtests/{file_name}.pdf", bbox_inches='tight')

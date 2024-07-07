@@ -65,4 +65,51 @@ def calc_klines_resample(df,
     return test
 
     
+def resample_instruments_dict(instruments_dict,
+                              resample_to_list = ["2h", "3h", "4h", "6h", "12h"],
+                              first_timeframe = "1h",
+                              clean_base_data_flag = False):
+    # Resample from 1hr --> 2h, 3h, 4h, 6h, 12h, 24h, 
+
+    # resample_to_list = ["15m", "20m", "30m", "60m"]
+    # first_timeframe = "5m"
+    for instrument,instrument_dict in instruments_dict.items():
+        # print(f"\n{instrument}\n")
+        cleaned_flag = False
+        for resample_to in resample_to_list:
+            # only clean_base_data for the first timeframe
+            if clean_base_data_flag and not cleaned_flag:
+                instrument_dict[first_timeframe] = clean_base_data(instrument_dict[first_timeframe])
+                cleaned_flag = True
+            df = instrument_dict[first_timeframe].copy()
+            window = int(int(resample_to[:-1])/int(first_timeframe[:-1]))
+            # print(f"Resampling {first_timeframe} to {resample_to} --> window: {window}")
+            if "m" in resample_to:
+                resample_to_formatted = resample_to[:-1]+"T"
+            else:
+                resample_to_formatted = resample_to
+            df_resampled = calc_klines_resample(df,window=window, resample_to=resample_to_formatted)
+            df_resampled.fillna(method="ffill", inplace=True)
+            df_resampled.dropna(inplace=True)
+            # print(df_resampled.columns)
+            instruments_dict[instrument][resample_to] = df_resampled
+    return instruments_dict
     
+
+def clean_base_data(df0, timeframe="1T"):
+
+    df = df0.resample(timeframe).last()
+
+    # Forward fill 'close' column
+    df['close'] = df['close'].ffill()
+
+    # Fill 'open', 'high', 'low' with 'close'
+    df[['open', 'high', 'low']] = df[['open', 'high', 'low']].apply(lambda row: row.fillna(df['close']))
+
+    # Fill 'volume' with 0
+    df['volume'] = df['volume'].fillna(0)
+
+    # Fill 'close_time' with timestamp from 'datetime'
+    df['close_time'] = df.index.values.astype(np.int64) // 10 ** 6
+
+    return df
