@@ -19,7 +19,7 @@ This repository houses a sophisticated quantitative trading model testing framew
 
 ```python:BTC_Tide.ipynb
 def calculate_tide(close, period=14):
-    tide = talib.EMA(close, timeperiod=period)
+    # 2 state PSAR
     return tide
 
 df['Tide'] = calculate_tide(df['close'])
